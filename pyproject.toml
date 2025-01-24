@@ -17,7 +17,6 @@ dependencies = [
     "torchvision",
     "wikipedia>=1.4.0",
     "wikipedia-api>=0.8.1",
-    "marker-pdf>=1.2.0"
 ]
 
 [project.scripts]
@@ -33,4 +32,5 @@ dev = [
     "mypy>=1.14.1",
     "pytest>=8.3.4",
     "ruff>=0.9.2",
+    "wat"
 ]

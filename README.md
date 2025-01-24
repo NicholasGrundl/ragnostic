@@ -72,18 +72,20 @@ The packages are a bit finnicky and some non python packages are required. Due t
 
 ## MacOS Intel
 
+> Due to pytorch versions being old on intel macOS i didnt get the marker pdf to run. Ill try it again on my WSL beast and see what happends.
+
 1. poppler: image analysis
     - `brew install poppler`
 
 2. Pytorch: CPU or GPU depending on machine
-    - `uv add torch==2.1.0 torchvision==0.16.0`
+    - `uv add torch torchvision`
     > You may need to install an explicit CPU version, in that case:
     > `uv pip install --index-url https://download.pytorch.org/whl/cpu torch==2.1.0 torchvision==0.16.0`
 
 3. PDF extraction packages
     - `uv add pymupdf4llm`
     - `uv add py-zerox`
-    - `uv add marker-pdf`
+    > marker-pdf is an early unstable version on mac intel
     > docling for intel mac with pinned pytorch is incompatible
 
 4. Web search and wikipedia
@@ -100,18 +102,21 @@ The packages are a bit finnicky and some non python packages are required. Due t
 1. poppler: image analysis
     - `sudo apt-get install poppler-utils`
 
-2. Pytorch: CPU or GPU depending on machine
+2. tesseract OCR (optional)
+    - see installation instructions for debian
+
+3. Pytorch: CPU or GPU depending on machine
     - `uv add torch torchvision`
 
-3. PDF extraction packages
+4. PDF extraction packages
     - `uv add pymupdf4llm`
     - `uv add py-zerox`
     - `uv add marker-pdf`
     - `uv add docling`
 
-4. Web search and wikipedia
+5. Web search and wikipedia
    - `uv add brave-search`
    - `uv add wikipedia wikipedia-api`
   
-5. Workflows and DAGs
+6. Workflows and DAGs
    - `uv add burr[start]`
