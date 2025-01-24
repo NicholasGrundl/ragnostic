@@ -6,8 +6,18 @@ readme = "README.md"
 authors = [
     { name = "Nicholas Grundl", email = "nicholasgrundl@gmail.com" }
 ]
-requires-python = ">=3.10"
-dependencies = []
+requires-python = ">=3.11"
+dependencies = [
+    "brave-search>=0.1.8",
+    "burr[start]>=0.37.1",
+    "llama-index>=0.12.13",
+    "py-zerox>=0.0.7",
+    "pymupdf4llm>=0.0.17",
+    "torch==2.2.2",
+    "torchvision==0.16.0",
+    "wikipedia>=1.4.0",
+    "wikipedia-api>=0.8.1",
+]
 
 [project.scripts]
 ragnostic = "ragnostic:main"
