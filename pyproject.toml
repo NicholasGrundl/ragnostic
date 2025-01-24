@@ -13,10 +13,11 @@ dependencies = [
     "llama-index>=0.12.13",
     "py-zerox>=0.0.7",
     "pymupdf4llm>=0.0.17",
-    "torch==2.2.2",
-    "torchvision==0.16.0",
+    "torch<2.3.0",
+    "torchvision",
     "wikipedia>=1.4.0",
     "wikipedia-api>=0.8.1",
+    "marker-pdf>=1.2.0"
 ]
 
 [project.scripts]
