@@ -99,6 +99,9 @@ The packages are a bit finnicky and some non python packages are required. Due t
    - `uv add llama_index`
 
 ## Ubuntu Intel + GPU
+
+We are going to go the more stable and classic route of conda and pip
+
 1. poppler: image analysis
     - `sudo apt-get install poppler-utils`
 
