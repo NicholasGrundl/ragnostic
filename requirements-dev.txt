@@ -1,5 +1,15 @@
+# Interactive Development
+jupyterlab
+ipywidgets
+wat
+
+#Unit Testing
 pytest
+pytest-cov
+
+# Formatting/Linting
 mypy
 ruff
-jupyterlab
-wat
+
+#editable
+-e .

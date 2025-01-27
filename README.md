@@ -135,3 +135,11 @@ We are going to go the more stable and classic route of conda and pip
     b. Alternatively use the requiremetns files
     - `requirements.txt`
     - `requirements-dev.txt`
+
+
+## Envrionment Vars
+
+1. NVIDIA/CUDA/Torch related
+    a. specify GPU architecture
+    - check with: ``
+    - for TheBeast: `export TORCH_CUDA_ARCH_LIST="8.6"`
