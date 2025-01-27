@@ -1,0 +1,37 @@
+#Pytorch
+torch
+torchvision
+torchaudio
+
+#PDF Parsing
+docling
+pymupdf4llm
+
+#Internet Search
+brave-search
+wikipedia
+wikipedia-api
+
+#Database/Storage
+sqlalchemy
+pydantic
+chromadb
+
+#ML/Data
+numpy
+pandas
+scikit-learn
+
+# Embeddings/LLMs
+tiktoken
+sentence-transformers
+openai
+cohere
+anthropic
+instructor
+
+# Orchestration
+burr[start]
+
+#Image manipulation
+Pillow

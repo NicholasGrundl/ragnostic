@@ -102,24 +102,36 @@ The packages are a bit finnicky and some non python packages are required. Due t
 
 We are going to go the more stable and classic route of conda and pip
 
-1. poppler: image analysis
-    - `sudo apt-get install poppler-utils`
+1. Setup a new miniconda env
 
-2. tesseract OCR (optional)
-    - see installation instructions for debian
+2. Install the OS specific packages (mostly OCR)
+    a. poppler: image analysis
+    - `conda install -c conda-forge poppler`
+    b. Tesseract
+    - `conda install -c conda-forge tesseract`
+
+3. Install CUDA (if GPU enabled)
+    a. Install CUDA on WSL
+    - https://docs.nvidia.com/cuda/wsl-user-guide/index.html#getting-started-with-cuda-on-wsl-2
+    b. Add to `.bashrc`
+    ```export PATH=/usr/local/cuda-12.8/bin${PATH:+:${PATH}}
+    export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+    ```
 
 3. Pytorch: CPU or GPU depending on machine
-    - `uv add torch torchvision`
-
-4. PDF extraction packages
-    - `uv add pymupdf4llm`
-    - `uv add py-zerox`
-    - `uv add marker-pdf`
-    - `uv add docling`
-
-5. Web search and wikipedia
-   - `uv add brave-search`
-   - `uv add wikipedia wikipedia-api`
-  
-6. Workflows and DAGs
-   - `uv add burr[start]`
+    - see: https://pytorch.org/get-started/locally/
+    - in the conda env: `pip install torch torchvision torchaudio`
+    - verify the installation
+        ```
+        import torch
+        x = torch.rand(5, 3)
+        print(x)
+        torch.cuda.is_available()
+        ```
+        
+4. Install packages and dev packages
+    a. Use the Makefile routine
+    - `make install`
+    b. Alternatively use the requiremetns files
+    - `requirements.txt`
+    - `requirements-dev.txt`
