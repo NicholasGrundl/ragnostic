@@ -69,4 +69,81 @@ A hierarchical retrieval augmented generation system that searches document summ
 - API service development
 - Enhanced reranking system
 - Evaluation metrics implementation
-- Parameter optimization
+- Parameter 
+
+
+
+
+## WORKING: Project Plan
+
+### Document Ingestion
+- Create file monitor system
+  * watchdog for directory monitoring
+  * file type detection
+- Implement Wikipedia API client
+  * wikipediaapi package
+  * error handling and rate limiting
+- Build PDF processing pipeline
+  * doculing integration
+  * layout analysis configuration
+- Design ID generation system
+  * UUID generation
+  * document type prefixes
+- Implement metadata extraction
+  * title and author extraction
+  * date and source tracking
+
+### Raw Storage
+- Design directory structure
+  * separate dirs by document type
+  * consistent naming convention
+- Implement file movement logic
+  * atomic operations
+  * duplicate handling
+- Create backup system
+  * periodic snapshots
+  * verification checks
+
+### Hierarchical Processing
+- Implement summary generation
+  * extractive summarization
+  * configurable length control
+- Design chunking system
+  * semantic boundaries
+  * context preservation
+- Create embedding pipeline
+  * model selection
+  * batch processing
+- Implement metadata tracking
+  * parent-child relationships
+  * position tracking
+
+### ChromaDB Integration
+- Design collection structure
+  * separate collections per level
+  * metadata schema
+- Implement vector storage
+  * batch insertion
+  * update handling
+- Create query interfaces
+  * filtering functions
+  * relationship tracking
+- Build index maintenance
+  * optimization routines
+  * health checks
+
+### Query Pipeline
+- Implement query processing
+  * embedding generation
+  * query reformulation
+- Create hierarchical search
+  * document filtering
+  * chunk retrieval
+- Design reranking system
+  * grouping logic
+  * score combination
+- Build result formatting
+  * metadata inclusion
+  * context assembly
+
+Would you like me to continue with the LanceDB implementation?

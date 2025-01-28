@@ -4,6 +4,7 @@ RAGnostic is a general system to implement heirarchal document retrieval.
 
 More narrowly for the proof of concept we will make a system that searches document summaries first to filter the document list, then performs vector search on smaller chunks within filtered documents.
 
+```mermaid
 flowchart LR
     subgraph Document Flow
         direction LR
@@ -21,17 +22,18 @@ flowchart LR
     end
 
     %% Styling
-    classDef docflow fill:#e6f3ff,stroke:#333
-    classDef queryflow fill:#fff0e6,stroke:#333
+    classDef docflow fill:#deeeff,color:#0f1440
+    classDef queryflow fill:#fff0e6,color:#0f1440
     
     class A,B,C,D docflow
     class E,F,G,H,I queryflow
-
+```
 
 ## Document Flow Components
 
 The document flow covers the addition of new documents and their subsequent processing for search and retrieval.
 
+```mermaid
 flowchart LR
     subgraph Document Flow
         direction LR
@@ -41,10 +43,10 @@ flowchart LR
     end
 
     %% Styling
-    classDef docflow fill:#e6f3ff,stroke:#333
+    classDef docflow fill:#deeeff,color:#0f1440
     
     class A,B,C,D docflow
-    
+``` 
 
 ### Document Ingestion
 
@@ -79,25 +81,55 @@ The semantic extraction system makes sense of the extracted content for each doc
 
 The Vector Storage system implements a hierarchical search architecture using ChromaDB collections to enable efficient two-stage retrieval. It maintains separate collections for document summaries and chunks, optimizing search performance while preserving document relationships. The system provides clean interfaces for updates and searches while ensuring data consistency across collections. The search strategies enabled are a document relvance search, and a filtered chunk relevance search
 
+### Document Flow Sequence
+
+```mermaid
+sequenceDiagram
+    participant ID as Ingest Directory
+    participant RS as Raw Storage
+    participant DL as Document Library
+    participant DP as Document Processor
+    participant SE as Semantic Extractor
+    participant VS as Vector Storage
+
+    ID->>RS: Store raw document
+    ID->>DL: Store filepath & doc_id
+    ID->>DL: Store ingestion metadata
+    
+    DP->>DL: Get raw filepath
+    DP->>DP: Extract text, images, tables
+    DP->>DL: Store extracted content
+    
+    SE->>DL: Get document content
+    SE->>SE: Generate sections
+    SE->>SE: Create chunks
+    SE->>SE: Generate embeddings
+    SE->>DL: Store sections & chunks
+    SE->>VS: Generate + Store document embeddings
+    SE->>VS: Generate + Store chunk embeddings
+```
+
+
 
 ## Query Flow
 
 The Query flow covers the search based on a user query, along with the reranking and context organization.
 
+```mermaid
 flowchart LR
     subgraph Query Flow
         direction LR
-        E[User Query] --> F[Query Embedding]
+        E[User Query] --> F[Query Processing]
         F --> G[Document Search]
         G --> H[Section/Chunk Search]
         H --> I[Chunk Reranking]
     end
 
     %% Styling
-    classDef queryflow fill:#fff0e6,stroke:#333
+    classDef queryflow fill:#fff0e6,color:#0f1440
     
     class E,F,G,H,I queryflow
-
+```
 
 ### Query Processing
 
@@ -113,113 +145,30 @@ The section/chunk search filters the chunk collection based on the Doc IDs then 
 
 ### Chunk Reranking
 
-The reranking approach here is based on chunk groups. We rerank based on the largest "contiguous group" and higherst score. Conceptually we want to find sections that have multiple chunks within them of relevancy indicating the section is important. We will use "section chunk coverage" as a metric 
+The reranking approach here is based on chunk groups. We rerank based on the largest "contiguous group" and higherst score. Conceptually we want to find sections that have multiple chunks within them of relevancy indicating the section is important. We will use "section chunk coverage" as a metric which is computed as (chunks returned from section)/(total chunks in section).
 
 
+### Query Flow Sequence
 
-
-
-
-
-
-
-
-
-
-
-
-
-## System Flow
-
+```mermaid
 sequenceDiagram
-    participant ID as Ingest Directory
-    participant DP as Document Processor
-    participant RS as Raw Storage
-    participant HP as Hierarchical Processor
-    participant CH as ChromaDB
-    participant QE as Query Engine
+    participant User
+    participant QP as Query Processor
+    participant DS as Document Search
+    participant VS as Vector Storage
+    participant CS as Chunk Search
+    participant RR as Reranker
 
-    ID->>DP: New document
-    DP->>RS: Store raw file
-    DP->>HP: Document content
-    HP->>HP: Generate summaries
-    HP->>HP: Create chunks
-    HP->>CH: Store vectors & metadata
-    QE->>CH: Query embedding
-    CH->>QE: Document matches
-    QE->>CH: Filtered chunk query
-    CH->>QE: Relevant chunks
+    User->>QP: Submit query
+    QP->>QP: Generate query embedding
+    QP->>DS: Search document summaries
+    DS->>VS: Get relevant documents
+    VS->>DS: Return document matches
+    DS->>CS: Filter by matched Doc IDs
+    CS->>VS: Search filtered chunks
+    VS->>CS: Return chunk matches
+    CS->>RR: Chunks for reranking
+    RR->>RR: Group by sections
+    RR->>User: Return ranked results
+```
 
-## Project Plan
-
-### Document Ingestion
-- Create file monitor system
-  * watchdog for directory monitoring
-  * file type detection
-- Implement Wikipedia API client
-  * wikipediaapi package
-  * error handling and rate limiting
-- Build PDF processing pipeline
-  * doculing integration
-  * layout analysis configuration
-- Design ID generation system
-  * UUID generation
-  * document type prefixes
-- Implement metadata extraction
-  * title and author extraction
-  * date and source tracking
-
-### Raw Storage
-- Design directory structure
-  * separate dirs by document type
-  * consistent naming convention
-- Implement file movement logic
-  * atomic operations
-  * duplicate handling
-- Create backup system
-  * periodic snapshots
-  * verification checks
-
-### Hierarchical Processing
-- Implement summary generation
-  * extractive summarization
-  * configurable length control
-- Design chunking system
-  * semantic boundaries
-  * context preservation
-- Create embedding pipeline
-  * model selection
-  * batch processing
-- Implement metadata tracking
-  * parent-child relationships
-  * position tracking
-
-### ChromaDB Integration
-- Design collection structure
-  * separate collections per level
-  * metadata schema
-- Implement vector storage
-  * batch insertion
-  * update handling
-- Create query interfaces
-  * filtering functions
-  * relationship tracking
-- Build index maintenance
-  * optimization routines
-  * health checks
-
-### Query Pipeline
-- Implement query processing
-  * embedding generation
-  * query reformulation
-- Create hierarchical search
-  * document filtering
-  * chunk retrieval
-- Design reranking system
-  * grouping logic
-  * score combination
-- Build result formatting
-  * metadata inclusion
-  * context assembly
-
-Would you like me to continue with the LanceDB implementation?

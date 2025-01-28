@@ -1,4 +1,4 @@
-# Document Processing Implementation Plan (MVP)
+# Document Ingestion and Processing Implementation Plan (MVP)
 
 ## Overview
 This document outlines the minimal viable implementation plan for document processing, focusing on basic ingestion, storage, and initial metadata capture without complex processing pipelines.
@@ -94,9 +94,12 @@ CREATE TABLE document_content (
 
 ### Initial Processing
 1. Extract basic text content
+    - docling 
+    - markerpdf
+    - placeholder for images and tables in text
+    - store tables as images as well
 2. Identify and save any images
-3. No complex parsing or analysis initially
-
+    - send to llm for captioning?
 
 
 ## Error Handling
