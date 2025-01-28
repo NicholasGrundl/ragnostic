@@ -2,6 +2,7 @@
 
 RAGnostic is a general system to implement heirarchal document retrieval. 
 
+## Overview
 More narrowly for the proof of concept we will make a system that searches document summaries first to filter the document list, then performs vector search on smaller chunks within filtered documents.
 
 ```mermaid
@@ -29,7 +30,23 @@ flowchart LR
     class E,F,G,H,I queryflow
 ```
 
-## Document Flow Components
+## MVP Scope
+### Data Sources
+- Wikipedia articles
+- PDF documents (textbooks, journal articles)
+
+### Initial Scale
+- 25 Wikipedia articles
+- 1 textbook (200 pages)
+- 2 journal articles
+
+### Target Scale
+- 10,000 Wikipedia articles
+- 20-50 textbooks
+- Thousands of journal articles
+
+
+## 1. Document Flow Components
 
 The document flow covers the addition of new documents and their subsequent processing for search and retrieval.
 
@@ -111,7 +128,7 @@ sequenceDiagram
 
 
 
-## Query Flow
+## 2. Query Flow
 
 The Query flow covers the search based on a user query, along with the reranking and context organization.
 

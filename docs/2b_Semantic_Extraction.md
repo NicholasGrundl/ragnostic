@@ -119,9 +119,10 @@ flowchart LR
   * Structured document outline
   * Section metadata
   * Location mappings
+  * `semantic_group` and `semantic_group_section` database entries
 
 ### 2.2 Media Captioning
-- Input: Images and tables with context
+- Input: Images and tables with document text context
 - Process:
   * Context assembly (nearby text + document metadata)
   * LLM caption generation
@@ -130,10 +131,17 @@ flowchart LR
   * Descriptive captions
   * Content categorization
   * Context relationships
+  * updated `document_image` database entries
 
 ### 2.3. Semantic Grouping
 - Input: semantic_groups and semantic_group_sections
-
+- Process:
+  * Render full text recursively for the semantic group
+  * pulls from document_sections
+  * replaces table and image pklaceholder with llm caption/image description
+- Output: full text renderings of semantic group
+  * full text
+  * markdown with emphasis and standard headers based on document_section level, etc
 
 
 ## 3. Chunking Stage
@@ -180,24 +188,28 @@ flowchart LR
 
 
 ## 5. Storage Systems
-### 5.1 Document Database (SQLite)
-- Schema implementation
-- Relationship management
-- Metadata storage
-- Content versioning
-
-### 5.2 Vector Database (ChromaDB)
+### 5.1 Vector Database (ChromaDB)
 - Collections:
-  * Document/section summaries
-  * Content chunks
-- Metadata mapping
-- Query optimization
+  * Semantic summaries
+  * Semantic chunks
+- Metadata mapping of document features to the database for filtering
 
 
+#### semantic_summaries
+- Collection name: `semantic_summaries`
+- Purpose: First-stage retrieval for document/bulk section filtering
+  * conceptually like topic / chapter based filtering
+
+#### semantic_chunks
+- Collection name: `semantic_chunks`
+- Purpose: Second-stage retrieval within filtered documents
+  * raw bits of text within a semantic group
+  * used to bvetter rank the semantic group
+  * better alignment of chunks within a sectionm / coverage == better semantic group
 
 
-## Document Database Schema
-
+## 5.2. Document Database (SQLite)
+A full view of the document schem to this stage
 
 ```sql
 ------------------------------------------------------------------

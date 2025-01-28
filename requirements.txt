@@ -5,6 +5,7 @@ torchaudio
 
 #PDF Parsing
 docling
+marker-pdf
 pymupdf4llm
 
 #Internet Search
