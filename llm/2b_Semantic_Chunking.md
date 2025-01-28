@@ -3,164 +3,165 @@
 ## Overview
 
 This document outlines the technical specification for the semantic extraction system, which is responsible for:
-- Generating document summaries
-- Creating logical section groupings
-- Chunking documents effectively
+- Creating logical section groupings within documents
+- captioning images and tables
+- Generating section summaries
+- Chunking sections effectively
 - Managing relationships between documents, sections, and chunks
 - Storing all extracted semantic information
+- embedding chunks and  preparing vector store
 
 ## System Architecture
 
 ```mermaid
-flowchart TB
-    subgraph Input
-        A[Processed Document Text]
-        B[Document Images]
-        C[Document Tables]
+flowchart LR
+    %% Define subgraphs with clear left-to-right flow
+    subgraph input[Input]
+        direction TB
+        docText[Document Text]
+        docImg[Document Images]
+        docTable[Document Tables]
     end
 
-    subgraph Processing
-        D[Document Summarization]
-        E[Section Detection]
-        F[Chunk Generation]
-        G[Relationship Mapping]
+    subgraph stage1[Extraction]
+        direction TB
+        struct[Structure Analysis]
+        caption[Media Captioning]
     end
 
-    subgraph Storage
-        H[Document Library DB]
-        I[Vector Storage]
+    subgraph stage2[Chunking]
+        direction TB
+        chunks[Section Chunks]
+        summaries[Section Summaries]
     end
 
-    A --> D
-    B --> D
-    C --> D
+    subgraph stage3[Embedding]
+        direction TB
+        chunkEmbed[Chunk Vectors]
+        sumEmbed[Summary Vectors]
+    end
+
+    subgraph storage[Storage]
+        direction TB
+        docDB[(Document DB)]
+        vecDB[(Vector DB)]
+    end
+
+    %% Define connections with minimal crossing
+    docText --> struct
+    docImg & docTable --> caption
     
-    A --> E
-    E --> F
+    struct --> chunks
+    struct --> summaries
+    caption --> summaries
     
-    D --> H
-    E --> H
-    F --> H
-    G --> H
+    chunks --> chunkEmbed
+    summaries --> sumEmbed
     
-    F --> I
-    D --> I
+    struct & caption & chunks & summaries --> docDB
+    chunkEmbed & sumEmbed --> vecDB
+
+    %% Styling
+    classDef default fill:#f9f9f9,color:#000000,stroke-width:1px
+    classDef input fill:#e1f5fe,color:#000000
+    classDef stage fill:#f3e5f5,color:#000000
+    classDef storage fill:#fff3e0,color:#000000
+    
+    class docText,docImg,docTable input
+    class struct,caption,chunks,summaries,chunkEmbed,sumEmbed stage
+    class docDB,vecDB storage
 ```
 
-## Document Summarization
 
-### Approach
-1. Generate hierarchical summaries:
-   - Document-level summary (high-level overview)
-   - Section-level summaries (key points per section)
-   - Image/table descriptions integrated into summaries
+## 1. Input Processing
+This section details how we describe the three input types shown in the diagram: document text, document images, and document tables. It covers the initial intake and preparation of these elements for downstream processing.
 
-2. Summary Generation Strategy:
-   - Use LLM to generate structured summaries
-   - Include metadata like key topics, document type, intended audience
-   - Preserve important numerical values and citations
-   - Maximum length: 1000 tokens for document summary
+### 1.1 Document Text Processing
+- strip any strange characters from extracted document
+- assign lines or location to the document text for chunking etc.
 
-### Summary Template
-```python
-{
-    "title": str,
-    "document_type": str,
-    "main_topics": List[str],
-    "target_audience": str,
-    "key_findings": List[str],
-    "summary": str,
-    "sections": List[SectionSummary]
-}
-```
+### 1.2 Image Processing
+- standardize the format and resolution for llm captioning
 
-## Section Detection
+### 1.3 Table Processing
+- choose image or CSV format to use
 
-### Approach
+## 2. Extraction Stage
+This section covers the two main extraction processes shown in the diagram: structure analysis for text content and captioning for media elements.
+
+### 2.1 Structure Analysis
+
 1. Identify section boundaries using:
    - Explicit headers/titles
    - Font size/style changes
    - Numerical/alphabetical markers
    - Natural topic transitions
+   - Track the section by location in document text...lines?
 
 2. Section Attributes:
    - Hierarchical level (H1, H2, etc.)
    - Section type (introduction, methodology, results, etc.)
-   - Parent-child relationships
+   - Parent-child relationships, image section relationships (e.g. where in the documents they are location)
 
-### Section Template
-```python
-{
-    "section_id": str,
-    "doc_id": str,
-    "parent_section_id": Optional[str],
-    "level": int,
-    "title": str,
-    "type": str,
-    "start_offset": int,
-    "end_offset": int,
-    "summary": str
-}
-```
+### 2.2 Media Captioning
+- ask a multimodal llm to caption the image
+- provide the surrounding image text for additional context
+- store the caption in document store
+  
+## 3. Chunking Stage
+This section details how we generate and manage both section chunks and their corresponding summaries from the extracted content.
 
-## Chunk Generation
+### 3.1 Section Chunks
+- run a standard chunking algorithm on each section
+- recursive length, with overlap, etc.
 
-### Chunking Strategy
-1. Primary Methods:
-   - Semantic chunking (based on complete thoughts/topics)
-   - Fixed-size chunking with smart breaks
-   - Hybrid approach combining both methods
+### 3.2 Section Summaries
+- send each identified sectiopn to an llm for summarization
+- include summary, labels/categories/tags
 
-2. Chunk Parameters:
-   - Target size: 512 tokens
-   - Maximum size: 1024 tokens
-   - Minimum size: 128 tokens
-   - Overlap: 50 tokens between chunks
+## 4. Embedding Generation 
+This section covers the vector embedding process for both chunks and summaries, including the embedding strategy and model selection.
 
-3. Special Handling:
-   - Tables: Keep complete tables in single chunks
-   - Lists: Maintain list context
-   - Citations: Include with relevant content
-   - Images: Reference in nearby text chunks
+### 4.1 Chunk Vectors
+- use standard BERT embedding for now
 
-### Chunk Template
-```python
-{
-    "chunk_id": str,
-    "doc_id": str,
-    "section_id": str,
-    "content": str,
-    "start_offset": int,
-    "end_offset": int,
-    "metadata": {
-        "contains_table": bool,
-        "contains_image_ref": bool,
-        "contains_citation": bool,
-        "chunk_type": str  # text, table, list, etc.
-    }
-}
-```
+### 4.2 Summary Vectors
+- use standard BERT embedding for now
+
+## 5. Storage Systems
+This section details the two storage systems shown in the diagram: the document database for processed content and metadata, and the vector database for embeddings.
+
+### 5.1 Document Database
+- See previous schema
+- SQLite implementation
+
+
+
+### 5.2 Vector Database
+- chromaDB implementation
+- a collection for sections
+- a collection for chunks
+- pull metadata from the document library DB into the collections
+
+
+
 
 ## Database Schema Updates
 
-### New Tables
-
 ```sql
 -- Document summaries
-CREATE TABLE document_summaries (
+CREATE TABLE section_summaries (
     doc_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     document_type TEXT NOT NULL,
     main_topics TEXT NOT NULL, -- JSON array
-    target_audience TEXT,
-    key_findings TEXT NOT NULL, -- JSON array
     summary TEXT NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (doc_id) REFERENCES documents(id)
 );
 
 -- Document sections
-CREATE TABLE document_sections (
+CREATE TABLE sections (
     section_id TEXT PRIMARY KEY,
     doc_id TEXT NOT NULL,
     parent_section_id TEXT,
@@ -176,14 +177,13 @@ CREATE TABLE document_sections (
 );
 
 -- Document chunks
-CREATE TABLE document_chunks (
+CREATE TABLE section_chunks (
     chunk_id TEXT PRIMARY KEY,
     doc_id TEXT NOT NULL,
     section_id TEXT NOT NULL,
     content TEXT NOT NULL,
     start_offset INTEGER NOT NULL,
     end_offset INTEGER NOT NULL,
-    metadata TEXT NOT NULL, -- JSON object
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (doc_id) REFERENCES documents(id),
     FOREIGN KEY (section_id) REFERENCES document_sections(section_id)
