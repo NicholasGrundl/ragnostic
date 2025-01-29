@@ -17,6 +17,7 @@ wikipedia-api
 sqlalchemy
 pydantic
 chromadb
+nanoid
 
 #ML/Data
 numpy
@@ -33,6 +34,7 @@ instructor
 
 # Orchestration
 burr[start]
+sf-hamilton[visualization]
 
 #Image manipulation
 Pillow

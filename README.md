@@ -109,6 +109,8 @@ We are going to go the more stable and classic route of conda and pip
     - `conda install -c conda-forge poppler`
     b. Tesseract
     - `conda install -c conda-forge tesseract`
+    c. graphviz
+    - `conda install graphviz`
 
 3. Install CUDA (if GPU enabled)
     a. Install CUDA on WSL
@@ -118,7 +120,7 @@ We are going to go the more stable and classic route of conda and pip
     export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
     ```
 
-3. Pytorch: CPU or GPU depending on machine
+4. Pytorch: CPU or GPU depending on machine
     - see: https://pytorch.org/get-started/locally/
     - in the conda env: `pip install torch torchvision torchaudio`
     - verify the installation
@@ -129,7 +131,7 @@ We are going to go the more stable and classic route of conda and pip
         torch.cuda.is_available()
         ```
         
-4. Install packages and dev packages
+5. Install packages and dev packages
     a. Use the Makefile routine
     - `make install`
     b. Alternatively use the requiremetns files
