@@ -2,7 +2,7 @@
 
 import argparse
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Optional
 
 
 def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
@@ -15,33 +15,47 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
         Tuple of (base_path, list of relative file paths)
     """
     paths = []
-    current_path_parts = []
+    current_dirs = []
     base_path = None
     
     with open(tree_file) as f:
         for line in f:
-            # Skip empty lines
-            if not line.strip():
-                continue
-            
+            print(line)
             # Parse header for base path
             if line.startswith("#!base_path="):
                 base_path = Path(line.strip().split("=", 1)[1])
                 continue
+
+            # Skip empty lines
+            if not line.strip():
+                continue
+            
+            # Calculate indent level (each level is 4 spaces)
+            indent = len(line) - len(line.lstrip())
+            level = indent // 4
+            print(f"-level {level}")
+
+            # Clean up the line
+            name = (line.strip()
+                   .replace('├── ', '')
+                   .replace('└── ', '')
+                   .replace('│', '')
+                   .strip())
+            print(f"- name {name}")
+
+            # Manage directory stack based on level
+            while len(current_dirs) > level:
+                current_dirs.pop()
                 
-            # Count the level of indentation
-            indent_level = (len(line) - len(line.lstrip())) // 4
-            
-            # Clean up the line - remove tree characters and whitespace
-            clean_line = line.strip().replace('├── ', '').replace('└── ', '').replace('│   ', '')
-            
-            # Adjust the current path based on indentation
-            current_path_parts = current_path_parts[:indent_level]
-            current_path_parts.append(clean_line)
-            
-            # Only add paths that look like files (have an extension or are __init__.py)
-            if '.' in clean_line or clean_line == '__init__.py':
-                paths.append('/'.join(current_path_parts))
+            if '.' in name:
+                # It's a file
+                full_path = '/'.join(current_dirs + [name])
+                if full_path not in paths:  # Avoid duplicates
+                    paths.append(full_path)
+            else:
+                # It's a directory
+                current_dirs = current_dirs[:level]
+                current_dirs.append(name)
     
     if base_path is None:
         raise ValueError("No base path found in tree file")
