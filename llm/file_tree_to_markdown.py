@@ -5,22 +5,28 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 
-def parse_tree_file(tree_file: Path) -> List[str]:
-    """Parse the tree file and extract all file paths.
+def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
+    """Parse the tree file and extract base path and all file paths.
     
     Args:
         tree_file: Path to the file containing the tree structure.
         
     Returns:
-        List of file paths extracted from the tree.
+        Tuple of (base_path, list of relative file paths)
     """
     paths = []
     current_path_parts = []
+    base_path = None
     
     with open(tree_file) as f:
         for line in f:
             # Skip empty lines
             if not line.strip():
+                continue
+            
+            # Parse header for base path
+            if line.startswith("#!base_path="):
+                base_path = Path(line.strip().split("=", 1)[1])
                 continue
                 
             # Count the level of indentation
@@ -37,8 +43,10 @@ def parse_tree_file(tree_file: Path) -> List[str]:
             if '.' in clean_line or clean_line == '__init__.py':
                 paths.append('/'.join(current_path_parts))
     
-    return paths
-
+    if base_path is None:
+        raise ValueError("No base path found in tree file")
+        
+    return base_path, paths
 
 def generate_markdown(
     tree_file: Path,
@@ -46,14 +54,7 @@ def generate_markdown(
     exclude_suffixes: Optional[List[str]] = None,
     exclude_filenames: Optional[List[str]] = None
 ) -> None:
-    """Generate a markdown file containing the contents of all files in the tree.
-    
-    Args:
-        tree_file: Path to the file containing the tree structure.
-        output_file: Path where to save the markdown file.
-        exclude_suffixes: List of file suffixes to exclude.
-        exclude_filenames: List of filenames to exclude.
-    """
+    """Generate a markdown file containing the contents of all files in the tree."""
     exclude_suffixes = set(exclude_suffixes or [])
     exclude_filenames = set(exclude_filenames or [])
     
@@ -66,32 +67,34 @@ def generate_markdown(
             not any(part.startswith('.') for part in Path(path).parts)
         )
     
-    # Get all file paths from the tree
+    # Get base path and file paths from the tree
+    base_path, relative_paths = parse_tree_file(tree_file)
     file_paths = [
-        path for path in parse_tree_file(tree_file)
+        path for path in relative_paths
         if should_include(path)
     ]
     
     # Generate the markdown content
     with open(output_file, 'w') as out_f:
         out_f.write("# Project Source Code\n\n")
+        out_f.write(f"Base path: `{base_path}`\n\n")
         
-        for file_path in file_paths:
+        for rel_path in file_paths:
+            abs_path = base_path / rel_path
             try:
                 # Write the file header
-                out_f.write(f"## {file_path}\n\n")
+                out_f.write(f"## {rel_path}\n\n")
                 out_f.write("```python\n")
                 
                 # Write the file contents
-                with open(file_path) as in_f:
+                with open(abs_path) as in_f:
                     out_f.write(in_f.read())
                 
                 out_f.write("```\n\n")
             except FileNotFoundError:
-                out_f.write(f"*File not found: {file_path}*\n\n")
+                out_f.write(f"*File not found: {abs_path}*\n\n")
             except Exception as e:
-                out_f.write(f"*Error reading file: {file_path} - {str(e)}*\n\n")
-
+                out_f.write(f"*Error reading file: {abs_path} - {str(e)}*\n\n")
 
 def main():
     """Parse command line arguments and run the markdown generator."""

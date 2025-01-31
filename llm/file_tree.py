@@ -10,6 +10,7 @@ def generate_file_tree(
     level: int = 10,  # Increased default depth
     exclude_suffixes: Optional[List[str]] = None,
     exclude_filenames: Optional[List[str]] = None,
+    include_base_path: bool = False
 ) -> str:
     """Generate a file tree string representation starting from the given directory.
     
@@ -18,6 +19,7 @@ def generate_file_tree(
         level: Maximum depth level to traverse (default: 10).
         exclude_suffixes: List of file suffixes to exclude (default: None).
         exclude_filenames: List of filenames to exclude (default: None).
+        include_base_path: Whether to include the base path in the output (default: False).
     
     Returns:
         str: String representation of the file tree.
@@ -66,7 +68,12 @@ def generate_file_tree(
         
         return "\n".join(result)
     
-    return build_tree(root, level)
+    tree = build_tree(root, level)
+    if include_base_path:
+        # Add header with absolute path
+        header = f"#!base_path={root.resolve()}\n"
+        return header + tree
+    return tree
 
 
 def main():
@@ -104,6 +111,12 @@ def main():
         help="List of filenames to exclude"
     )
     
+    parser.add_argument(
+        "-b", "--include-base-path",
+        action="store_true",
+        help="Include the base path in the output"
+    )
+
     args = parser.parse_args()
     
     try:
@@ -111,7 +124,8 @@ def main():
             directory=args.directory,
             level=args.level,
             exclude_suffixes=args.exclude_suffixes,
-            exclude_filenames=args.exclude_filenames
+            exclude_filenames=args.exclude_filenames,
+            include_base_path=args.include_base_path,
         )
         print(tree)
     except ValueError as e:

@@ -16,7 +16,9 @@ jupyter:
 
 
 FILETREE_SCRIPT=./llm/file_tree.py
-
+FILETREE_OUTPUT=./llm/tree.md
+SOURCE_SCRIPT=./llm/file_tree_to_markdown.py
+SOURCE_OUTPUT=./llm/tree_source.md
 .PHONY: filetree
 filetree:filetree.src
 
@@ -27,7 +29,8 @@ filetree.src:
 		--level 10 \
 		--exclude-suffixes .pyc .pyo .pyd \
 		--exclude-filenames __pycache__ .git .pytest_cache .env .venv node_modules .ipynb_checkpoints\
-	| tee llm/filetree_src.md
+		--include-base-path \
+	| tee $(FILETREE_OUTPUT)
 
 .PHONY: filetree.repo
 filetree.repo:
@@ -36,4 +39,9 @@ filetree.repo:
 		--level 10 \
 		--exclude-suffixes .pyc .pyo .pyd \
 		--exclude-filenames __pycache__ .git .pytest_cache .env .venv node_modules .ipynb_checkpoints data\
-	| tee llm/filetree_repo.md
+		--include-base-path \
+	| tee $(FILETREE_OUTPUT)
+
+.PHONY: source
+source:
+	@python $(SOURCE_SCRIPT) $(FILETREE_OUTPUT) -o $(SOURCE_OUTPUT)
