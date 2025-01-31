@@ -1,5 +1,5 @@
 """SQLAlchemy models for the document database."""
-from datetime import datetime
+import datetime
 from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, JSON
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -14,13 +14,13 @@ class Document(Base):
     file_hash = Column(String, nullable=False, unique=True)
     file_size_bytes = Column(Integer, nullable=False)
     mime_type = Column(String, nullable=False)
-    ingestion_date = Column(DateTime, nullable=False, default=datetime.utcnow)
+    ingestion_date = Column(DateTime, nullable=False, default=datetime.datetime.now(datetime.timezone.utc))
 
     # Relationships
-    metadata = relationship("DocumentMetadata", back_populates="document", uselist=False)
-    sections = relationship("DocumentSection", back_populates="document")
-    images = relationship("DocumentImage", back_populates="document")
-    tables = relationship("DocumentTable", back_populates="document")
+    doc_metadata = relationship("DocumentMetadata", back_populates="document", uselist=False)
+    doc_sections = relationship("DocumentSection", back_populates="document")
+    doc_images = relationship("DocumentImage", back_populates="document")
+    doc_tables = relationship("DocumentTable", back_populates="document")
 
 
 class DocumentMetadata(Base):
@@ -36,7 +36,7 @@ class DocumentMetadata(Base):
     language = Column(String)
 
     # Relationships
-    document = relationship("Document", back_populates="metadata")
+    document = relationship("Document", back_populates="doc_metadata")
 
 
 class DocumentSection(Base):
@@ -54,11 +54,11 @@ class DocumentSection(Base):
     page_end = Column(Integer)
 
     # Relationships
-    document = relationship("Document", back_populates="sections")
+    document = relationship("Document", back_populates="doc_sections")
     parent_section = relationship("DocumentSection", remote_side=[section_id])
-    child_sections = relationship("DocumentSection")
-    images = relationship("DocumentImage", back_populates="section")
-    tables = relationship("DocumentTable", back_populates="section")
+    child_sections = relationship("DocumentSection", overlaps="parent_section")
+    doc_images = relationship("DocumentImage", back_populates="section")
+    doc_tables = relationship("DocumentTable", back_populates="section")
 
 
 class DocumentImage(Base):
@@ -74,8 +74,8 @@ class DocumentImage(Base):
     page_number = Column(Integer, nullable=False)
 
     # Relationships
-    document = relationship("Document", back_populates="images")
-    section = relationship("DocumentSection", back_populates="images")
+    document = relationship("Document", back_populates="doc_images")
+    section = relationship("DocumentSection", back_populates="doc_images")
 
 
 class DocumentTable(Base):
@@ -90,5 +90,5 @@ class DocumentTable(Base):
     page_number = Column(Integer, nullable=False)
 
     # Relationships
-    document = relationship("Document", back_populates="tables")
-    section = relationship("DocumentSection", back_populates="tables")
+    document = relationship("Document", back_populates="doc_tables")
+    section = relationship("DocumentSection", back_populates="doc_tables")

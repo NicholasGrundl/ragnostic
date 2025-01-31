@@ -144,11 +144,11 @@ def test_get_nonexistent_document(db_client: DatabaseClient):
     assert db_client.get_document_by_id("nonexistent") is None
 
 
-def test_create_sqlite_url():
+def test_create_sqlite_url(tmp_path):
     """Test SQLite URL creation."""
-    path = "/path/to/db.sqlite"
-    url = create_sqlite_url(path)
-    assert url == f"sqlite:///{path}"
+    db_file = tmp_path / "db.sqlite"
+    url = create_sqlite_url(str(db_file))
+    assert url == f"sqlite:///{db_file}"
 
 
 def test_default_sqlite_url():
