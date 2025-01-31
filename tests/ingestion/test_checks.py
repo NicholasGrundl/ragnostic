@@ -13,10 +13,7 @@ from ragnostic.ingestion.validation.checks import (
 )
 from ragnostic.ingestion.validation.schema import ValidationCheckType, ValidationCheckFailure
 
-@pytest.mark.parametrize("pdf_file", [
-    pytest.param(pytest.lazy_fixture("sample_pdf")),
-    pytest.param(pytest.lazy_fixture("large_pdf"))
-])
+@pytest.mark.parametrize("pdf_file", ["sample_pdf", "large_pdf"], indirect=True)
 def test_compute_file_hash(pdf_file):
     """Test computing file hash."""
     # Test valid file
