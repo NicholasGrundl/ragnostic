@@ -7,7 +7,7 @@ from typing import List, Optional
 
 def generate_file_tree(
     directory: str | Path,
-    level: int = 3,
+    level: int = 10,  # Increased default depth
     exclude_suffixes: Optional[List[str]] = None,
     exclude_filenames: Optional[List[str]] = None,
 ) -> str:
@@ -15,7 +15,7 @@ def generate_file_tree(
     
     Args:
         directory: Path to the root directory.
-        level: Maximum depth level to traverse (default: 3).
+        level: Maximum depth level to traverse (default: 10).
         exclude_suffixes: List of file suffixes to exclude (default: None).
         exclude_filenames: List of filenames to exclude (default: None).
     
@@ -41,29 +41,30 @@ def generate_file_tree(
         )
     
     def build_tree(path: Path, current_level: int, prefix: str = "") -> str:
-        if current_level < 1:
+        if current_level < 1 or not should_include(path):
             return ""
         
-        if not path.is_dir():
-            return f"{prefix}└── {path.name}\n" if should_include(path) else ""
+        result = [path.name if not prefix else f"{prefix}{path.name}"]
         
-        result = []
-        items = sorted(path.iterdir(), key=lambda x: (not x.is_dir(), x.name))
-        
-        for i, item in enumerate(items):
-            if not should_include(item):
-                continue
-                
-            is_last = i == len(items) - 1
-            current_prefix = prefix + ("└── " if is_last else "├── ")
-            next_prefix = prefix + ("    " if is_last else "│   ")
+        if path.is_dir() and current_level > 1:
+            items = sorted(
+                [p for p in path.iterdir() if should_include(p)],
+                key=lambda x: (not x.is_dir(), x.name)
+            )
             
-            result.append(current_prefix + item.name)
-            subtree = build_tree(item, current_level - 1, next_prefix)
-            if subtree:
-                result.append(subtree.rstrip())
+            for i, item in enumerate(items):
+                is_last = i == len(items) - 1
+                if not prefix:
+                    new_prefix = "├── " if not is_last else "└── "
+                else:
+                    new_prefix = prefix.replace("└── ", "    ").replace("├── ", "│   ")
+                    new_prefix += "├── " if not is_last else "└── "
+                
+                subtree = build_tree(item, current_level - 1, new_prefix)
+                if subtree:
+                    result.append(subtree)
         
-        return "\n".join(result) + "\n"
+        return "\n".join(result)
     
     return build_tree(root, level)
 
@@ -85,7 +86,7 @@ def main():
     parser.add_argument(
         "-l", "--level",
         type=int,
-        default=3,
+        default=10,  # Increased default depth
         help="Maximum depth level to traverse"
     )
     
