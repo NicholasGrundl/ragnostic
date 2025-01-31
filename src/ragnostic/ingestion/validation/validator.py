@@ -1,15 +1,14 @@
-"""Validation logic for ingestion pipeline."""
-import hashlib
+"""High-level document validation logic."""
 from pathlib import Path
 from typing import List, Optional
-import magic  # python-magic for mime type detection
 
 from ragnostic.db.client import DatabaseClient
-from .schema import (
-    ValidationResult,
-    BatchValidationResult,
-    ValidationError,
-    ValidationErrorType,
+from .schema import ValidationCheckFailure, ValidationCheckType, ValidationResult, BatchValidationResult
+from .checks import (
+    check_file_hash,
+    check_file_size,
+    check_mime_type,
+    check_duplicate,
 )
 
 class DocumentValidator:
@@ -21,14 +20,6 @@ class DocumentValidator:
         max_file_size: int = 100 * 1024 * 1024,  # 100MB default
         supported_mimetypes: Optional[List[str]] = None
     ):
-        """Initialize validator with configuration.
-        
-        Args:
-            db_client: Database client for checking duplicates
-            max_file_size: Maximum file size in bytes
-            supported_mimetypes: List of supported mime types. If None, defaults to
-                               PDF types only.
-        """
         self.db_client = db_client
         self.max_file_size = max_file_size
         self.supported_mimetypes = supported_mimetypes or [
@@ -36,89 +27,47 @@ class DocumentValidator:
             'application/x-pdf',
         ]
     
-    def _compute_file_hash(self, filepath: Path) -> Optional[str]:
-        """Compute SHA-256 hash of file."""
-        try:
-            sha256_hash = hashlib.sha256()
-            with open(filepath, "rb") as f:
-                for byte_block in iter(lambda: f.read(4096), b""):
-                    sha256_hash.update(byte_block)
-            return sha256_hash.hexdigest()
-        except Exception:
-            return None
-    
     def _validate_single_file(self, filepath: Path) -> ValidationResult:
-        """Validate a single file against all validation rules."""
-        errors: List[ValidationError] = []
-        file_hash: Optional[str] = None
+        """Validate a single file against all validation checks."""
+        check_failures = []
+        file_hash = None
+        mime_type = None
         
         # Check if file exists and is readable
         if not filepath.exists() or not filepath.is_file():
-            errors.append(ValidationError(
+            return ValidationResult(
                 filepath=filepath,
-                error_type=ValidationErrorType.OTHER,
-                message="File does not exist or is not a regular file"
-            ))
-            return ValidationResult(filepath=filepath, is_valid=False, errors=errors)
-        
-        # Check file size
-        try:
-            file_size = filepath.stat().st_size
-            if file_size > self.max_file_size:
-                errors.append(ValidationError(
+                is_valid=False,
+                check_failures=[ValidationCheckFailure(
                     filepath=filepath,
-                    error_type=ValidationErrorType.FILE_TOO_LARGE,
-                    message=f"File exceeds maximum size of {self.max_file_size} bytes",
-                    details={"file_size": file_size, "max_size": self.max_file_size}
-                ))
-        except Exception as e:
-            errors.append(ValidationError(
-                filepath=filepath,
-                error_type=ValidationErrorType.PERMISSION_ERROR,
-                message=f"Unable to check file size: {str(e)}"
-            ))
+                    check_type=ValidationCheckType.OTHER,
+                    message="File does not exist or is not a regular file"
+                )]
+            )
+        
+        # Run file size check
+        if failure := check_file_size(filepath, self.max_file_size):
+            check_failures.append(failure)
         
         # Check mime type
-        try:
-            mime_type = magic.from_file(str(filepath), mime=True)
-            if mime_type not in self.supported_mimetypes:
-                errors.append(ValidationError(
-                    filepath=filepath,
-                    error_type=ValidationErrorType.INVALID_MIMETYPE,
-                    message=f"Unsupported mime type: {mime_type}",
-                    details={"mime_type": mime_type}
-                ))
-        except Exception as e:
-            errors.append(ValidationError(
-                filepath=filepath,
-                error_type=ValidationErrorType.OTHER,
-                message=f"Unable to determine mime type: {str(e)}"
-            ))
+        mime_type, failure = check_mime_type(filepath, self.supported_mimetypes)
+        if failure:
+            check_failures.append(failure)
         
         # Compute hash and check for duplicates
-        file_hash = self._compute_file_hash(filepath)
-        if file_hash:
-            existing_doc = self.db_client.get_document_by_hash(file_hash)
-            if existing_doc:
-                errors.append(ValidationError(
-                    filepath=filepath,
-                    error_type=ValidationErrorType.DUPLICATE_HASH,
-                    message="Document with same hash already exists",
-                    details={"existing_doc_id": existing_doc.id}
-                ))
-        else:
-            errors.append(ValidationError(
-                filepath=filepath,
-                error_type=ValidationErrorType.CORRUPTED_FILE,
-                message="Unable to compute file hash"
-            ))
+        file_hash, failure = check_file_hash(filepath)
+        if failure:
+            check_failures.append(failure)
+        elif file_hash:  # Only check for duplicates if we got a valid hash
+            if failure := check_duplicate(filepath, file_hash, self.db_client):
+                check_failures.append(failure)
         
         # Create validation result
-        is_valid = len(errors) == 0
+        is_valid = len(check_failures) == 0
         metadata = None
         if is_valid:
             metadata = {
-                "file_size": file_size,
+                "file_size": filepath.stat().st_size,
                 "mime_type": mime_type,
             }
         
@@ -126,19 +75,12 @@ class DocumentValidator:
             filepath=filepath,
             is_valid=is_valid,
             file_hash=file_hash,
-            errors=errors,
+            check_failures=check_failures,
             metadata=metadata
         )
     
     def validate_files(self, filepaths: List[Path]) -> BatchValidationResult:
-        """Validate multiple files and return batch results.
-        
-        Args:
-            filepaths: List of paths to validate
-            
-        Returns:
-            BatchValidationResult containing valid and invalid files
-        """
+        """Validate multiple files and return batch results."""
         results = BatchValidationResult()
         
         for filepath in filepaths:
