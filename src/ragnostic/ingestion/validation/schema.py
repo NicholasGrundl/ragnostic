@@ -24,9 +24,10 @@ class ValidationResult(BaseModel):
     """Result of validating a single file."""
     filepath: Path
     is_valid: bool
-    file_hash: Optional[str] = None
+    file_hash: Optional[str] = Field(default=None, description="Hash of the file")
+    mime_type: Optional[str] = Field(default=None, description="MIME type of the file")
+    file_size_bytes: Optional[int] = Field(default=None, description="Size of the file in bytes")
     check_failures: List[ValidationCheckFailure] = Field(default_factory=list)
-    metadata: Optional[dict] = Field(default=None, description="File metadata if validation successful")
 
 class BatchValidationResult(BaseModel):
     """Results from validating multiple files."""
