@@ -51,18 +51,19 @@ def check_file_size(filepath: Path, max_size: int) -> Union[int, ValidationCheck
     """Check if file size is within limits."""
     try:
         file_size = filepath.stat().st_size
-        if file_size > max_size:
-            return ValidationCheckFailure(
-                filepath=filepath,
-                check_type=ValidationCheckType.FILE_TOO_LARGE,
-                message=f"File exceeds maximum size of {max_size} bytes",
-                details={"file_size": file_size, "max_size": max_size}
-            )
     except Exception as e:
         return ValidationCheckFailure(
             filepath=filepath,
             check_type=ValidationCheckType.PERMISSION_ERROR,
             message=f"Unable to check file size: {str(e)}"
+        )
+        
+    if file_size > max_size:
+        return ValidationCheckFailure(
+            filepath=filepath,
+            check_type=ValidationCheckType.FILE_TOO_LARGE,
+            message=f"File exceeds maximum size of {max_size} bytes",
+            details={"file_size": file_size, "max_size": max_size}
         )
     return file_size
     
