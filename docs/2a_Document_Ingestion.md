@@ -202,3 +202,76 @@ CREATE TABLE document_tables (
 
 ### Implementation
 [Placeholder, needs work...]
+
+
+
+## Document Database Diagram
+
+```mermaid
+erDiagram
+    Document ||--|| DocumentMetadata : has
+    Document ||--o{ DocumentSection : contains
+    Document ||--o{ DocumentImage : has
+    Document ||--o{ DocumentTable : has
+    DocumentSection ||--|| SectionContent : has
+    DocumentSection ||--o{ DocumentSection : "parent of"
+    DocumentSection ||--o{ DocumentImage : contains
+    DocumentSection ||--o{ DocumentTable : contains
+
+    Document {
+        string id PK
+        string raw_file_path
+        string file_hash
+        integer file_size_bytes
+        datetime ingestion_date
+        integer total_sections
+        integer total_images
+        integer total_tables
+        integer total_pages
+    }
+
+    DocumentMetadata {
+        string doc_id PK, FK
+        string title
+        json authors
+        string language
+        datetime creation_date
+    }
+
+    DocumentSection {
+        string section_id PK
+        string doc_id FK
+        string parent_section_id FK
+        integer level
+        integer sequence_order
+        integer word_count
+        integer image_count
+        integer table_count
+    }
+
+    SectionContent {
+        string section_id PK, FK
+        string title
+        text content
+        integer page_start
+        integer page_end
+    }
+
+    DocumentImage {
+        integer id PK
+        string doc_id FK
+        string section_id FK
+        integer page_number
+        text image_data
+        text caption
+    }
+
+    DocumentTable {
+        integer id PK
+        string doc_id FK
+        string section_id FK
+        integer page_number
+        json table_data
+        text caption
+    }
+```    

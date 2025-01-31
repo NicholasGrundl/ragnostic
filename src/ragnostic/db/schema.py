@@ -1,4 +1,4 @@
-"""Pydantic models for the document database."""
+"""Pydantic models for the document database using Pydantic v2."""
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
@@ -21,6 +21,10 @@ class DocumentCreate(DocumentBase):
 class Document(DocumentBase):
     """Schema for reading a document."""
     ingestion_date: datetime
+    total_sections: int = Field(default=0)
+    total_images: int = Field(default=0)
+    total_tables: int = Field(default=0)
+    total_pages: int = Field(default=0)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -30,7 +34,6 @@ class DocumentMetadataBase(BaseModel):
     doc_id: str
     title: Optional[str] = None
     authors: Optional[List[str]] = Field(default=None, description="List of authors")
-    description: Optional[str] = None
     creation_date: Optional[datetime] = None
     page_count: Optional[int] = None
     language: Optional[str] = None
@@ -46,17 +49,35 @@ class DocumentMetadata(DocumentMetadataBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SectionContentBase(BaseModel):
+    """Base section content schema."""
+    section_id: str
+    title: str
+    content: str
+    page_start: Optional[int] = None
+    page_end: Optional[int] = None
+
+
+class SectionContentCreate(SectionContentBase):
+    """Schema for creating section content."""
+    pass
+
+
+class SectionContent(SectionContentBase):
+    """Schema for reading section content."""
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DocumentSectionBase(BaseModel):
     """Base document section schema."""
     section_id: str
     doc_id: str
     parent_section_id: Optional[str] = None
     level: int = Field(description="Header level (1=H1, etc)")
-    title: str
-    content: str
     sequence_order: int
-    page_start: Optional[int] = None
-    page_end: Optional[int] = None
+    word_count: int = Field(default=0)
+    image_count: int = Field(default=0)
+    table_count: int = Field(default=0)
 
 
 class DocumentSectionCreate(DocumentSectionBase):
@@ -67,6 +88,7 @@ class DocumentSectionCreate(DocumentSectionBase):
 class DocumentSection(DocumentSectionBase):
     """Schema for reading a document section."""
     child_sections: List["DocumentSection"] = Field(default_factory=list)
+    content: Optional[SectionContent] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -77,7 +99,6 @@ class DocumentImageBase(BaseModel):
     section_id: str
     image_data: str = Field(description="Base64 encoded image data")
     caption: Optional[str] = None
-    embedding_id: Optional[str] = Field(None, description="Vector store reference")
     page_number: int
 
 

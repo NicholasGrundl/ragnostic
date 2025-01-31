@@ -71,7 +71,7 @@ def ingestion(state: State, storage_dir: str) -> State:
         # Rename with document ID
         rename_result = utils.rename_file(file_path=copy_result.filepath, new_name=doc_filename)
         if not rename_result.success:
-            failed.append((src_file, rename_result.error_code))
+            failed.append((rename_result.filepath, rename_result.error_code))
             continue
         successful.append(rename_result.filepath)
     

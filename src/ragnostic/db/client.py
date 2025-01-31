@@ -1,6 +1,6 @@
 """Database client for handling all database operations."""
 from typing import Optional, List
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, update
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.exc import IntegrityError
 
@@ -72,15 +72,37 @@ class DatabaseClient:
             ).first()
             return schema.DocumentMetadata.model_validate(result) if result else None
 
-    def create_section(self, section: schema.DocumentSectionCreate) -> schema.DocumentSection:
-        """Create document section."""
+    def create_section(self, 
+                      section: schema.DocumentSectionCreate, 
+                      content: schema.SectionContentCreate) -> schema.DocumentSection:
+        """Create document section with its content."""
         with self.get_session() as session:
+            # Create section
             db_section = models.DocumentSection(**section.model_dump())
             session.add(db_section)
+            
+            # Create section content
+            db_content = models.SectionContent(**content.model_dump())
+            session.add(db_content)
+            
             try:
                 session.commit()
                 session.refresh(db_section)
-                return schema.DocumentSection.model_validate(db_section)
+                
+                # Update document metrics
+                doc = session.query(models.Document).filter(
+                    models.Document.id == section.doc_id
+                ).first()
+                doc.total_sections += 1
+                session.commit()
+                
+                # Get the complete section with content
+                result = (
+                    session.query(models.DocumentSection)
+                    .filter(models.DocumentSection.section_id == section.section_id)
+                    .first()
+                )
+                return schema.DocumentSection.model_validate(result)
             except IntegrityError:
                 session.rollback()
                 raise ValueError(f"Section {section.section_id} already exists")
@@ -88,44 +110,57 @@ class DatabaseClient:
     def get_document_sections(self, doc_id: str) -> List[schema.DocumentSection]:
         """Get all sections for a document ordered by sequence."""
         with self.get_session() as session:
-            results = session.query(models.DocumentSection).filter(
-                models.DocumentSection.doc_id == doc_id
-            ).order_by(models.DocumentSection.sequence_order).all()
-            return [schema.DocumentSection.model_validate(r) for r in results]
+            sections = (
+                session.query(models.DocumentSection)
+                .filter(models.DocumentSection.doc_id == doc_id)
+                .order_by(models.DocumentSection.sequence_order)
+                .all()
+            )
+            return [schema.DocumentSection.model_validate(s) for s in sections]
 
     def create_image(self, image: schema.DocumentImageCreate) -> schema.DocumentImage:
-        """Create document image."""
+        """Create document image and update metrics."""
         with self.get_session() as session:
             db_image = models.DocumentImage(**image.model_dump())
             session.add(db_image)
             session.commit()
+            
+            # Update metrics
+            doc = session.query(models.Document).filter(
+                models.Document.id == image.doc_id
+            ).first()
+            doc.total_images += 1
+            
+            section = session.query(models.DocumentSection).filter(
+                models.DocumentSection.section_id == image.section_id
+            ).first()
+            section.image_count += 1
+            session.commit()
             session.refresh(db_image)
+            
             return schema.DocumentImage.model_validate(db_image)
 
-    def get_section_images(self, section_id: str) -> List[schema.DocumentImage]:
-        """Get all images for a section."""
-        with self.get_session() as session:
-            results = session.query(models.DocumentImage).filter(
-                models.DocumentImage.section_id == section_id
-            ).order_by(models.DocumentImage.page_number).all()
-            return [schema.DocumentImage.model_validate(r) for r in results]
-
     def create_table(self, table: schema.DocumentTableCreate) -> schema.DocumentTable:
-        """Create document table."""
+        """Create document table and update metrics."""
         with self.get_session() as session:
             db_table = models.DocumentTable(**table.model_dump())
             session.add(db_table)
             session.commit()
+            
+            # Update metrics
+            doc = session.query(models.Document).filter(
+                models.Document.id == table.doc_id
+            ).first()
+            doc.total_tables += 1
+            
+            section = session.query(models.DocumentSection).filter(
+                models.DocumentSection.section_id == table.section_id
+            ).first()
+            section.table_count += 1
+            session.commit()
             session.refresh(db_table)
+            
             return schema.DocumentTable.model_validate(db_table)
-
-    def get_section_tables(self, section_id: str) -> List[schema.DocumentTable]:
-        """Get all tables for a section."""
-        with self.get_session() as session:
-            results = session.query(models.DocumentTable).filter(
-                models.DocumentTable.section_id == section_id
-            ).order_by(models.DocumentTable.page_number).all()
-            return [schema.DocumentTable.model_validate(r) for r in results]
 
     def delete_document(self, doc_id: str) -> bool:
         """Delete a document and all its related data."""
