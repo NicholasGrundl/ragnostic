@@ -42,6 +42,10 @@ filetree.repo:
 		--include-base-path \
 	| tee $(FILETREE_OUTPUT)
 
+
 .PHONY: source
-source:
+source:source.src
+
+.PHONY: source.src
+source.src:
 	@python $(SOURCE_SCRIPT) $(FILETREE_OUTPUT) -o $(SOURCE_OUTPUT)

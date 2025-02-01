@@ -21,44 +21,41 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
     
     with open(tree_file) as f:
         for line in f:
+            line = line.strip() #remove trailing \n
+
             # Parse header for base path
             if line.startswith("#!base_path="):
-                base_path = Path(line.strip().split("=", 1)[1])
+                prefix, _, base_path = line.partition("=")
+                base_path = Path(base_path).resolve()
                 continue
-
+                
             # Skip empty lines and lines with just tree characters
             if not line.strip() or line.strip() in ['├──', '└──', '│']:
                 continue
-            
+
             # Count the actual indent level by looking at the tree characters
-            indent = len(line) - len(line.lstrip())
-            # Each level consists of 4 characters: either "│   " or "    "
+            prefix, _, name = line.partition("─ ")
+            indent = len(prefix+_)
             level = indent // 4
-            
-            # Clean up the line
-            name = (line.strip()
-                   .replace('├── ', '')
-                   .replace('└── ', '')
-                   .replace('│', '')
-                   .strip())
 
             # Handle directory structure
-            if level < prev_level:
+            if level< prev_level:
                 # Going back up the tree, remove directories from current path
-                current_dirs = current_dirs[:level]
+                current_dirs = current_dirs[:level-1]
             elif level == prev_level and current_dirs:
-                # Same level, replace last directory if it exists
-                current_dirs.pop()
-            
+                # Same level, do nothing
+                pass
+
             # Add current item to path
             if name:  # Skip empty names
-                if '.' in name:  # It's a file
-                    full_path = str(Path(*current_dirs) / name)
+                # Determine the current dir
+                if '.' not in name:  # It's a dir
+                    current_dirs.append(name)
+                else:  # It's a file
+                    full_path = str(Path().joinpath(*current_dirs) / name)
                     if full_path not in paths:  # Avoid duplicates
                         paths.append(full_path)
-                else:  # It's a directory
-                    current_dirs.append(name)
-            
+
             prev_level = level
     
     if base_path is None:
@@ -81,6 +78,24 @@ def generate_markdown(
         exclude_suffixes: List of file suffixes to exclude
         exclude_filenames: List of filenames to exclude
     """
+    
+    # Determine the language for syntax highlighting
+    lang = {
+        '.py': 'python',
+        '.js': 'javascript',
+        '.ts': 'typescript',
+        '.md': 'markdown',
+        '.json': 'json',
+        '.yaml': 'yaml',
+        '.yml': 'yaml',
+        '.sh': 'bash',
+        '.ipynb': 'json',
+        '.html': 'html',
+        '.css': 'css',
+    }
+    plaintext_extensions: set[str] = set(lang.keys())
+    
+
     exclude_suffixes = set(exclude_suffixes or [])
     exclude_filenames = set(exclude_filenames or [])
     
@@ -99,61 +114,51 @@ def generate_markdown(
         path for path in relative_paths
         if should_include(path)
     ]
-    
+
     # Generate the markdown content
-    with open(output_file, 'w') as out_f:
-        out_f.write("# Project Source Code\n\n")
-        out_f.write(f"Base path: `{base_path}`\n\n")
-        
-        # Group files by directory for better organization
-        current_dir = None
-        for rel_path in sorted(file_paths):
-            dir_path = str(Path(rel_path).parent)
-            
-            # Add directory headers for better organization
-            if dir_path != current_dir:
-                if dir_path == '.':
-                    out_f.write("## Root Directory\n\n")
-                else:
-                    out_f.write(f"## {dir_path}\n\n")
-                current_dir = dir_path
-            
-            abs_path = base_path / rel_path
+    output_content = []
+
+    for idx, file_path in enumerate(file_paths, start=1):
+        # Convert to Path object and ensure unix-style path string
+        abs_path = Path(base_path) / file_path
+
+        # Create markdown entry header
+        output_content.append(f"<file_{idx}>")
+        output_content.append(f"<path>{file_path}</path>")
+
+        output_content.append(f"<content>")
+        # Process file content based on extension
+        if abs_path.suffix.lower() in plaintext_extensions:
+            suffix = Path(abs_path).suffix
+            code_lang = lang.get(suffix, '')
             try:
-                # Write the file header
-                out_f.write(f"### {Path(rel_path).name}\n\n")
-                
-                # Determine the language for syntax highlighting
-                suffix = Path(rel_path).suffix
-                lang = {
-                    '.py': 'python',
-                    '.js': 'javascript',
-                    '.ts': 'typescript',
-                    '.md': 'markdown',
-                    '.json': 'json',
-                    '.yaml': 'yaml',
-                    '.yml': 'yaml',
-                    '.sh': 'bash',
-                    '.ipynb': 'json',
-                }.get(suffix, '')
-                
-                # Write the file contents
-                if suffix in {'.pdf', '.jpg', '.png', '.gif'}:
-                    out_f.write(f"*Binary file: {rel_path}*\n\n")
-                else:
-                    try:
-                        with open(abs_path) as in_f:
-                            out_f.write(f"```{lang}\n")
-                            out_f.write(in_f.read())
-                            out_f.write("\n```\n\n")
-                    except UnicodeDecodeError:
-                        out_f.write(f"*Binary file: {rel_path}*\n\n")
-                    except FileNotFoundError:
-                        out_f.write(f"*File not found: {rel_path}*\n\n")
-                    except Exception as e:
-                        out_f.write(f"*Error reading file: {rel_path} - {str(e)}*\n\n")
+                with abs_path.open('r', encoding='utf-8') as f:
+                    content = f.read()
+                output_content.append(f"```{code_lang}")
+                output_content.append(content)
+                output_content.append("```")
             except Exception as e:
-                out_f.write(f"*Error processing file: {rel_path} - {str(e)}*\n\n")
+                output_content.append(
+                    f"\nError reading file: {str(e)}"
+                )
+        else:
+            output_content.append(
+                "\n[Content not displayed - Non-plaintext file]"
+            )
+        output_content.append(f"</content>")
+        output_content.append(f"</file_{idx}>\n")
+
+
+    # Write to output file
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with output_path.open('w', encoding='utf-8') as f:
+        f.write('\n'.join(output_content))
+
+    return None
+
+
 
 
 def main():
