@@ -17,10 +17,10 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
     paths = []
     current_dirs = []
     base_path = None
+    prev_level = 0
     
     with open(tree_file) as f:
         for line in f:
-            print(line)
             # Parse header for base path
             if line.startswith("#!base_path="):
                 base_path = Path(line.strip().split("=", 1)[1])
@@ -30,37 +30,42 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
             if not line.strip():
                 continue
             
-            # Calculate indent level (each level is 4 spaces)
+            # Count the actual indent level by looking at the tree characters
             indent = len(line) - len(line.lstrip())
+            # Each level consists of 4 characters: either "│   " or "    "
             level = indent // 4
-            print(f"-level {level}")
-
+            
             # Clean up the line
             name = (line.strip()
                    .replace('├── ', '')
                    .replace('└── ', '')
                    .replace('│', '')
                    .strip())
-            print(f"- name {name}")
 
-            # Manage directory stack based on level
-            while len(current_dirs) > level:
-                current_dirs.pop()
-                
-            if '.' in name:
-                # It's a file
+            # Handle directory structure
+            if level < prev_level:
+                # Going back up the tree, remove directories from current path
+                current_dirs = current_dirs[:level]
+            elif level == prev_level:
+                # Same level, replace last directory
+                if current_dirs:
+                    current_dirs.pop()
+            # else: level > prev_level, we'll append the new directory
+            
+            if '.' in name:  # It's a file
                 full_path = '/'.join(current_dirs + [name])
                 if full_path not in paths:  # Avoid duplicates
                     paths.append(full_path)
-            else:
-                # It's a directory
-                current_dirs = current_dirs[:level]
+            else:  # It's a directory
                 current_dirs.append(name)
+            
+            prev_level = level
     
     if base_path is None:
         raise ValueError("No base path found in tree file")
         
     return base_path, paths
+
 
 def generate_markdown(
     tree_file: Path,
@@ -68,7 +73,14 @@ def generate_markdown(
     exclude_suffixes: Optional[List[str]] = None,
     exclude_filenames: Optional[List[str]] = None
 ) -> None:
-    """Generate a markdown file containing the contents of all files in the tree."""
+    """Generate a markdown file containing the contents of all files in the tree.
+    
+    Args:
+        tree_file: Path to the file containing the tree structure
+        output_file: Path where to write the markdown output
+        exclude_suffixes: List of file suffixes to exclude
+        exclude_filenames: List of filenames to exclude
+    """
     exclude_suffixes = set(exclude_suffixes or [])
     exclude_filenames = set(exclude_filenames or [])
     
@@ -93,12 +105,38 @@ def generate_markdown(
         out_f.write("# Project Source Code\n\n")
         out_f.write(f"Base path: `{base_path}`\n\n")
         
-        for rel_path in file_paths:
+        # Group files by directory for better organization
+        current_dir = None
+        for rel_path in sorted(file_paths):
+            dir_path = str(Path(rel_path).parent)
+            
+            # Add directory headers for better organization
+            if dir_path != current_dir:
+                if dir_path == '.':
+                    out_f.write("## Root Directory\n\n")
+                else:
+                    out_f.write(f"## {dir_path}\n\n")
+                current_dir = dir_path
+            
             abs_path = base_path / rel_path
             try:
                 # Write the file header
-                out_f.write(f"## {rel_path}\n\n")
-                out_f.write("```python\n")
+                out_f.write(f"### {Path(rel_path).name}\n\n")
+                
+                # Determine the language for syntax highlighting
+                suffix = Path(rel_path).suffix
+                lang = {
+                    '.py': 'python',
+                    '.js': 'javascript',
+                    '.ts': 'typescript',
+                    '.md': 'markdown',
+                    '.json': 'json',
+                    '.yaml': 'yaml',
+                    '.yml': 'yaml',
+                    '.sh': 'bash',
+                }.get(suffix, '')
+                
+                out_f.write(f"```{lang}\n")
                 
                 # Write the file contents
                 with open(abs_path) as in_f:
@@ -109,6 +147,7 @@ def generate_markdown(
                 out_f.write(f"*File not found: {abs_path}*\n\n")
             except Exception as e:
                 out_f.write(f"*Error reading file: {abs_path} - {str(e)}*\n\n")
+
 
 def main():
     """Parse command line arguments and run the markdown generator."""
