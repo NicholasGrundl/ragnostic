@@ -1,4 +1,114 @@
 <file_1>
+<path>ragnostic/__init__.py</path>
+<content>
+```python
+def main() -> None:
+    print("Hello from ragnostic!")
+
+```
+</content>
+</file_1>
+
+<file_2>
+<path>ragnostic/dag_ingestion.py</path>
+<content>
+```python
+import pathlib
+from burr.core import State, action, ApplicationBuilder
+
+from ragnostic import utils
+
+@action(reads=[], writes=["ingestion_status","ingestion_filepaths"])
+def monitor(state: State, ingest_dir: str) -> State:
+    """Checks if directory has files to ingest"""
+    file_paths = []
+    # Check filepath is valid
+    path = pathlib.Path(ingest_dir)
+    if (path.exists()) and (path.is_dir()):
+        for p in path.iterdir():
+            if p.suffix in ['.PDF','.pdf']:
+                file_paths.append(str(p.resolve()))
+        ingestion_status = "ingesting"
+    else:
+        #log status error
+        ingestion_status="completed"
+    
+    return state.update(
+        ingestion_status=ingestion_status, 
+        ingestion_filepaths=file_paths
+    )
+
+@action(reads=["ingestion_filepaths"], writes=["valid_filepaths","invalid_filepaths"])
+def validation(state: State, db_connection:str) -> State:
+    """Check which files in the ingestion list are valid
+    - not duplicates, etc.
+    """
+    valid_filepaths = []
+    invalid_filepaths = []
+
+    for filepath in state.get("ingestion_filepaths"):
+        # Check duplicates
+        # check with hash against the database?
+        # - other checks?
+        is_valid=True
+
+        #move to list
+        if is_valid:
+            valid_filepaths.append(filepath)
+        else:
+            invalid_filepaths.append(filepath)
+
+    return state.update(
+        valid_filepaths=valid_filepaths, 
+        invalid_filepaths=invalid_filepaths,
+    )
+
+
+@action(reads=["valid_filepaths"], writes=["successful_docs","failed_docs"])
+def ingestion(state: State, storage_dir: str) -> State:
+    """Process a batch of documents, tracking successes and failures."""
+    
+    filepaths = state.get("valid_filepaths")
+    successful = []
+    failed = []
+    
+    for p in filepaths:
+        
+        # Move file to new location
+        copy_result = utils.copy_file(src_path=p, dest_dir=storage_dir)
+        if not copy_result.success:
+            failed.append((p, copy_result.error_code))
+            continue
+        # Generate new document ID and filename
+        doc_id = utils.create_doc_id(prefix="DOC")
+        suffix = pathlib.Path(p).suffix
+        doc_filename = f"{doc_id}{suffix}"
+        # Rename with document ID
+        rename_result = utils.rename_file(file_path=copy_result.filepath, new_name=doc_filename)
+        if not rename_result.success:
+            failed.append((rename_result.filepath, rename_result.error_code))
+            continue
+        successful.append(rename_result.filepath)
+    
+    return state.update(successful_docs=successful, failed_docs=failed)
+
+@action(reads=["successful_docs"], writes=["ingestion_status"])
+def indexing(state: State, db_connection: str) -> State:
+    """Update database with succesfully ingested docs"""
+    successful = state.get("successful_docs")
+
+    # Update database with all document ids
+    # - primary key is document id
+    # - filepath is storage path
+    # - should we add metadata here? put a status for further processing?
+    ingestion_status = "Completed"
+    return state.update(ingestion_status=ingestion_status)
+
+```
+</content>
+</file_2>
+
+<file_3>
 <path>ragnostic/db/__init__.py</path>
 <content>
 ```python
@@ -59,9 +169,9 @@ __all__ = [
 
 ```
 </content>
-</file_1>
+</file_3>
 
-<file_2>
+<file_4>
 <path>ragnostic/db/client.py</path>
 <content>
 ```python
@@ -243,9 +353,9 @@ class DatabaseClient:
 
 ```
 </content>
-</file_2>
+</file_4>
 
-<file_3>
+<file_5>
 <path>ragnostic/db/models.py</path>
 <content>
 ```python
@@ -348,9 +458,9 @@ class DocumentTable(Base):
 
 ```
 </content>
-</file_3>
+</file_5>
 
-<file_4>
+<file_6>
 <path>ragnostic/db/schema.py</path>
 <content>
 ```python
@@ -495,9 +605,18 @@ class DocumentTable(DocumentTableBase):
 DocumentSection.model_rebuild()
 ```
 </content>
-</file_4>
+</file_6>
 
-<file_5>
+<file_7>
+<path>ragnostic/ingestion/__init__.py</path>
+<content>
+```python
+
+```
+</content>
+</file_7>
+
+<file_8>
 <path>ragnostic/ingestion/indexing/__init__.py</path>
 <content>
 ```python
@@ -513,9 +632,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_5>
+</file_8>
 
-<file_6>
+<file_9>
 <path>ragnostic/ingestion/indexing/extraction.py</path>
 <content>
 ```python
@@ -535,16 +654,13 @@ logger = logging.getLogger(__name__)
 class PDFExtractor:
     """Handles PDF metadata and text extraction using pymupdf4llm."""
     
-    def __init__(self, 
-                 extract_text: bool = True,
-                 text_preview_chars: int = 1000):
+    def __init__(self, text_preview_chars: int = 1000):
         """Initialize the PDF extractor.
         
         Args:
             extract_text: Whether to extract text preview
             text_preview_chars: Number of characters to extract for preview
         """
-        self.extract_text = extract_text
         self.text_preview_chars = text_preview_chars
     
     def extract_metadata(self, filepath: Path) -> Tuple[Optional[DocumentMetadataExtracted], Optional[str]]:
@@ -559,30 +675,16 @@ class PDFExtractor:
         """
         try:
             # Open PDF with pymupdf4llm
-            pdf = pymupdf4llm.PDFProcessor(str(filepath))
+            page_chunks  = pymupdf4llm.to_markdown(str(filepath), page_chunks=True)
             
             # Extract basic metadata
-            metadata = DocumentMetadataExtracted(
-                title=pdf.doc.metadata.get("title"),
-                authors=self._parse_authors(pdf.doc.metadata.get("author")),
-                creation_date=self._parse_date(pdf.doc.metadata.get("creationDate")),
-                page_count=len(pdf.doc),
-                language=pdf.doc.metadata.get("language")
-            )
+            metadata = self._parse_page_chunks(page_chunks)
             
             # Extract text preview if enabled
-            if self.extract_text:
-                try:
-                    # Get text from first page or until preview limit
-                    text = pdf.doc[0].get_text()
-                    if text:
-                        metadata.text_preview = text[:self.text_preview_chars]
-                except Exception as e:
-                    logger.warning(f"Text extraction failed: {e}")
-                    # Continue with metadata only
-            
-            return metadata, None
-            
+            text = metadata.text_preview
+            if text:
+                metadata.text_preview = text[:self.text_preview_chars]
+
         except Exception as e:
             error_msg = f"Metadata extraction failed: {str(e)}"
             logger.error(error_msg)
@@ -606,11 +708,62 @@ class PDFExtractor:
             return datetime.now()  # Placeholder
         except Exception:
             return None
+        
+    def _parse_page_chunks(self, page_chunks: list[dict],) -> DocumentMetadataExtracted:
+        """Parse page chunks from pymupdf4llm into document metadata.
+        
+        Args:
+            page_chunks: List of page chunk dictionaries from pymupdf4llm
+            
+        Returns:
+            DocumentMetadataExtracted with parsed metadata and text preview
+            
+        Notes:
+            - Uses first chunk for document-level metadata
+            - Combines preview text from multiple chunks up to limit
+            - Handles missing or empty metadata fields
+        """
+        if not page_chunks:
+            return DocumentMetadataExtracted()
+        
+        # Get metadata from first chunk as it contains document info
+        first_chunk = page_chunks[0]
+        metadata = first_chunk.get('metadata', {})
+        
+        # Extract creation date
+        creation_date = None
+        if date_str := metadata.get('creationDate'):
+            try:
+                # TODO: Implement PDF date string parsing
+                creation_date = self._parse_date(date_str)
+            except Exception:
+                pass
+                
+        # Build text preview from chunks
+        text_preview = ""
+        for chunk in page_chunks:
+            if chunk_text := chunk.get('text', ''):
+                text_preview += chunk_text + "\n"
+                if len(text_preview) >= self.text_preview_chars:
+                    text_preview = text_preview[:self.text_preview_chars]
+                    break
+                        
+        # Parse authors if present
+        authors = self._parse_authors(metadata.get('author'))
+                    
+        return DocumentMetadataExtracted(
+            title=metadata.get('title'),
+            authors=authors,
+            creation_date=creation_date,
+            page_count=metadata.get('page_count'),
+            language=metadata.get('language'),
+            text_preview=text_preview.strip()
+        )
 ```
 </content>
-</file_6>
+</file_9>
 
-<file_7>
+<file_10>
 <path>ragnostic/ingestion/indexing/indexer.py</path>
 <content>
 ```python
@@ -749,9 +902,9 @@ class DocumentIndexer:
         return results
 ```
 </content>
-</file_7>
+</file_10>
 
-<file_8>
+<file_11>
 <path>ragnostic/ingestion/indexing/schema.py</path>
 <content>
 ```python
@@ -777,7 +930,7 @@ class DocumentMetadataExtracted(BaseModel):
     title: Optional[str] = None
     authors: Optional[List[str]] = None
     creation_date: Optional[datetime] = None
-    page_count: Optional[int] = None
+    page_count: Optional[int] = Field(None, ge=0, description="Total number of pages in document. Must be >= 0 if provided")
     language: Optional[str] = None
     text_preview: Optional[str] = Field(None, description="First page or N characters of text")
 
@@ -816,9 +969,79 @@ class BatchIndexingResult(BaseModel):
         return len(self.failed_docs)
 ```
 </content>
-</file_8>
+</file_11>
 
-<file_9>
+<file_12>
+<path>ragnostic/ingestion/monitor.py</path>
+<content>
+```python
+"""Directory monitoring functionality for document ingestion."""
+from pathlib import Path
+from typing import List
+
+from .schema import MonitorResult, IngestionStatus, SupportedFileType
+
+
+def get_ingestible_files(directory: str | Path) -> MonitorResult:
+    """
+    Check directory for files that can be ingested.
+    
+    Args:
+        directory: Path to directory to monitor
+    
+    Returns:
+        MonitorResult containing status and any found files
+        
+    Example:
+        >>> result = get_ingestible_files("/path/to/docs")
+        >>> if result.has_files:
+        ...     print(f"Found {len(result.files)} files to ingest")
+    """
+    path = Path(directory)
+    
+    # Validate directory exists
+    if not path.exists():
+        return MonitorResult(
+            status=IngestionStatus.ERROR,
+            error_message=f"Directory does not exist: {directory}"
+        )
+    
+    # Validate it's actually a directory
+    if not path.is_dir():
+        return MonitorResult(
+            status=IngestionStatus.ERROR,
+            error_message=f"Path is not a directory: {directory}"
+        )
+    
+    # Get all files with supported extensions
+    supported_types = SupportedFileType.supported_types()
+    found_files: List[Path] = []
+    
+    try:
+        for file_path in path.iterdir():
+            if file_path.suffix in supported_types:
+                found_files.append(file_path.resolve())
+    except PermissionError:
+        return MonitorResult(
+            status=IngestionStatus.ERROR,
+            error_message=f"Permission denied accessing directory: {directory}"
+        )
+    except Exception as e:
+        return MonitorResult(
+            status=IngestionStatus.ERROR,
+            error_message=f"Error scanning directory: {str(e)}"
+        )
+    
+    # Return results
+    return MonitorResult(
+        status=IngestionStatus.MONITORING,
+        files=found_files
+    )
+```
+</content>
+</file_12>
+
+<file_13>
 <path>ragnostic/ingestion/processor/__init__.py</path>
 <content>
 ```python
@@ -834,9 +1057,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_9>
+</file_13>
 
-<file_10>
+<file_14>
 <path>ragnostic/ingestion/processor/processor.py</path>
 <content>
 ```python
@@ -930,9 +1153,9 @@ class DocumentProcessor:
         return result
 ```
 </content>
-</file_10>
+</file_14>
 
-<file_11>
+<file_15>
 <path>ragnostic/ingestion/processor/schema.py</path>
 <content>
 ```python
@@ -987,9 +1210,9 @@ class BatchProcessingResult(BaseModel):
         return len(self.failed_docs)
 ```
 </content>
-</file_11>
+</file_15>
 
-<file_12>
+<file_16>
 <path>ragnostic/ingestion/processor/storage.py</path>
 <content>
 ```python
@@ -1072,18 +1295,65 @@ def store_document(
         })
 ```
 </content>
-</file_12>
+</file_16>
 
-<file_13>
+<file_17>
+<path>ragnostic/ingestion/schema.py</path>
+<content>
+```python
+"""Pydantic models for the ingestion pipeline."""
+from enum import Enum
+from pathlib import Path
+from typing import List
+from pydantic import BaseModel, Field, ConfigDict
+
+
+class IngestionStatus(str, Enum):
+    """Status of the ingestion process."""
+    PENDING = "pending"
+    MONITORING = "monitoring"
+    INGESTING = "ingesting"
+    COMPLETED = "completed"
+    ERROR = "error"
+
+
+class MonitorResult(BaseModel):
+    """Result of monitoring a directory for files to ingest."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    status: IngestionStatus
+    files: List[Path] = Field(default_factory=list)
+    error_message: str | None = None
+
+    @property
+    def has_files(self) -> bool:
+        """Check if any files were found."""
+        return len(self.files) > 0
+
+
+class SupportedFileType(str, Enum):
+    """Supported file types for ingestion."""
+    PDF = ".pdf"
+    PDF_CAPS = ".PDF"  # Some systems might use uppercase extension
+    
+    @classmethod
+    def supported_types(cls) -> set[str]:
+        """Get set of all supported file types."""
+        return {member.value for member in cls}
+```
+</content>
+</file_17>
+
+<file_18>
 <path>ragnostic/ingestion/validation/__init__.py</path>
 <content>
 ```python
 
 ```
 </content>
-</file_13>
+</file_18>
 
-<file_14>
+<file_19>
 <path>ragnostic/ingestion/validation/checks.py</path>
 <content>
 ```python
@@ -1191,9 +1461,9 @@ def check_hash_unique(filepath: Path, file_hash: str, db_client: DatabaseClient)
 
 ```
 </content>
-</file_14>
+</file_19>
 
-<file_15>
+<file_20>
 <path>ragnostic/ingestion/validation/schema.py</path>
 <content>
 ```python
@@ -1242,9 +1512,9 @@ class BatchValidationResult(BaseModel):
         return len(self.invalid_files) > 0
 ```
 </content>
-</file_15>
+</file_20>
 
-<file_16>
+<file_21>
 <path>ragnostic/ingestion/validation/validator.py</path>
 <content>
 ```python
@@ -1358,242 +1628,6 @@ class DocumentValidator:
                 results.invalid_files.append(result)
         
         return results
-```
-</content>
-</file_16>
-
-<file_17>
-<path>ragnostic/ingestion/__init__.py</path>
-<content>
-```python
-
-```
-</content>
-</file_17>
-
-<file_18>
-<path>ragnostic/ingestion/monitor.py</path>
-<content>
-```python
-"""Directory monitoring functionality for document ingestion."""
-from pathlib import Path
-from typing import List
-
-from .schema import MonitorResult, IngestionStatus, SupportedFileType
-
-
-def get_ingestible_files(directory: str | Path) -> MonitorResult:
-    """
-    Check directory for files that can be ingested.
-    
-    Args:
-        directory: Path to directory to monitor
-    
-    Returns:
-        MonitorResult containing status and any found files
-        
-    Example:
-        >>> result = get_ingestible_files("/path/to/docs")
-        >>> if result.has_files:
-        ...     print(f"Found {len(result.files)} files to ingest")
-    """
-    path = Path(directory)
-    
-    # Validate directory exists
-    if not path.exists():
-        return MonitorResult(
-            status=IngestionStatus.ERROR,
-            error_message=f"Directory does not exist: {directory}"
-        )
-    
-    # Validate it's actually a directory
-    if not path.is_dir():
-        return MonitorResult(
-            status=IngestionStatus.ERROR,
-            error_message=f"Path is not a directory: {directory}"
-        )
-    
-    # Get all files with supported extensions
-    supported_types = SupportedFileType.supported_types()
-    found_files: List[Path] = []
-    
-    try:
-        for file_path in path.iterdir():
-            if file_path.suffix in supported_types:
-                found_files.append(file_path.resolve())
-    except PermissionError:
-        return MonitorResult(
-            status=IngestionStatus.ERROR,
-            error_message=f"Permission denied accessing directory: {directory}"
-        )
-    except Exception as e:
-        return MonitorResult(
-            status=IngestionStatus.ERROR,
-            error_message=f"Error scanning directory: {str(e)}"
-        )
-    
-    # Return results
-    return MonitorResult(
-        status=IngestionStatus.MONITORING,
-        files=found_files
-    )
-```
-</content>
-</file_18>
-
-<file_19>
-<path>ragnostic/ingestion/schema.py</path>
-<content>
-```python
-"""Pydantic models for the ingestion pipeline."""
-from enum import Enum
-from pathlib import Path
-from typing import List
-from pydantic import BaseModel, Field, ConfigDict
-
-
-class IngestionStatus(str, Enum):
-    """Status of the ingestion process."""
-    PENDING = "pending"
-    MONITORING = "monitoring"
-    INGESTING = "ingesting"
-    COMPLETED = "completed"
-    ERROR = "error"
-
-
-class MonitorResult(BaseModel):
-    """Result of monitoring a directory for files to ingest."""
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    
-    status: IngestionStatus
-    files: List[Path] = Field(default_factory=list)
-    error_message: str | None = None
-
-    @property
-    def has_files(self) -> bool:
-        """Check if any files were found."""
-        return len(self.files) > 0
-
-
-class SupportedFileType(str, Enum):
-    """Supported file types for ingestion."""
-    PDF = ".pdf"
-    PDF_CAPS = ".PDF"  # Some systems might use uppercase extension
-    
-    @classmethod
-    def supported_types(cls) -> set[str]:
-        """Get set of all supported file types."""
-        return {member.value for member in cls}
-```
-</content>
-</file_19>
-
-<file_20>
-<path>ragnostic/__init__.py</path>
-<content>
-```python
-def main() -> None:
-    print("Hello from ragnostic!")
-
-```
-</content>
-</file_20>
-
-<file_21>
-<path>ragnostic/dag_ingestion.py</path>
-<content>
-```python
-import pathlib
-from burr.core import State, action, ApplicationBuilder
-
-from ragnostic import utils
-
-@action(reads=[], writes=["ingestion_status","ingestion_filepaths"])
-def monitor(state: State, ingest_dir: str) -> State:
-    """Checks if directory has files to ingest"""
-    file_paths = []
-    # Check filepath is valid
-    path = pathlib.Path(ingest_dir)
-    if (path.exists()) and (path.is_dir()):
-        for p in path.iterdir():
-            if p.suffix in ['.PDF','.pdf']:
-                file_paths.append(str(p.resolve()))
-        ingestion_status = "ingesting"
-    else:
-        #log status error
-        ingestion_status="completed"
-    
-    return state.update(
-        ingestion_status=ingestion_status, 
-        ingestion_filepaths=file_paths
-    )
-
-@action(reads=["ingestion_filepaths"], writes=["valid_filepaths","invalid_filepaths"])
-def validation(state: State, db_connection:str) -> State:
-    """Check which files in the ingestion list are valid
-    - not duplicates, etc.
-    """
-    valid_filepaths = []
-    invalid_filepaths = []
-
-    for filepath in state.get("ingestion_filepaths"):
-        # Check duplicates
-        # check with hash against the database?
-        # - other checks?
-        is_valid=True
-
-        #move to list
-        if is_valid:
-            valid_filepaths.append(filepath)
-        else:
-            invalid_filepaths.append(filepath)
-
-    return state.update(
-        valid_filepaths=valid_filepaths, 
-        invalid_filepaths=invalid_filepaths,
-    )
-
-
-@action(reads=["valid_filepaths"], writes=["successful_docs","failed_docs"])
-def ingestion(state: State, storage_dir: str) -> State:
-    """Process a batch of documents, tracking successes and failures."""
-    
-    filepaths = state.get("valid_filepaths")
-    successful = []
-    failed = []
-    
-    for p in filepaths:
-        
-        # Move file to new location
-        copy_result = utils.copy_file(src_path=p, dest_dir=storage_dir)
-        if not copy_result.success:
-            failed.append((p, copy_result.error_code))
-            continue
-        # Generate new document ID and filename
-        doc_id = utils.create_doc_id(prefix="DOC")
-        suffix = pathlib.Path(p).suffix
-        doc_filename = f"{doc_id}{suffix}"
-        # Rename with document ID
-        rename_result = utils.rename_file(file_path=copy_result.filepath, new_name=doc_filename)
-        if not rename_result.success:
-            failed.append((rename_result.filepath, rename_result.error_code))
-            continue
-        successful.append(rename_result.filepath)
-    
-    return state.update(successful_docs=successful, failed_docs=failed)
-
-@action(reads=["successful_docs"], writes=["ingestion_status"])
-def indexing(state: State, db_connection: str) -> State:
-    """Update database with succesfully ingested docs"""
-    successful = state.get("successful_docs")
-
-    # Update database with all document ids
-    # - primary key is document id
-    # - filepath is storage path
-    # - should we add metadata here? put a status for further processing?
-    ingestion_status = "Completed"
-    return state.update(ingestion_status=ingestion_status)
-
 ```
 </content>
 </file_21>

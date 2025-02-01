@@ -1,45 +1,379 @@
 <file_1>
-<path>__init__.py</path>
+<path>ingestion_indexer/__init__.py</path>
 <content>
+```python
 
-Error reading file: [Errno 2] No such file or directory: '/home/nicholasgrundl/projects/ragnostic/tests/__init__.py'
+```
 </content>
 </file_1>
 
 <file_2>
-<path>conftest.py</path>
+<path>ingestion_indexer/conftest.py</path>
 <content>
+```python
+"""Shared fixtures for indexing tests."""
+import pytest
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import Mock, MagicMock
 
-Error reading file: [Errno 2] No such file or directory: '/home/nicholasgrundl/projects/ragnostic/tests/conftest.py'
+from ragnostic.db.client import DatabaseClient
+from ragnostic.db.schema import Document, DocumentMetadata
+
+
+@pytest.fixture
+def sample_pdf_bytes():
+    """Sample PDF file content."""
+    return (
+        b"%PDF-1.4\n"
+        b"1 0 obj\n"
+        b"<<\n"
+        b"/Title (Test Document)\n"
+        b"/Author (Test Author)\n"
+        b"/CreationDate (D:20240201000000)\n"
+        b">>\n"
+        b"endobj\n"
+        b"%%EOF"
+    )
+
+
+@pytest.fixture
+def sample_pdf_path(tmp_path, sample_pdf_bytes):
+    """Create a sample PDF file for testing."""
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_bytes(sample_pdf_bytes)
+    return pdf_path
+
+
+@pytest.fixture
+def mock_db_client():
+    """Create a mock database client."""
+    client = Mock(spec=DatabaseClient)
+    
+    # Setup default document return
+    client.create_document.return_value = Document(
+        id="DOC123",
+        raw_file_path="/path/test.pdf",
+        file_hash="abc123",
+        file_size_bytes=1000,
+        mime_type="application/pdf",
+        ingestion_date=datetime.now(),
+        total_sections=0,
+        total_images=0,
+        total_tables=0,
+        total_pages=0
+    )
+    
+    # Setup default metadata return
+    client.create_metadata.return_value = DocumentMetadata(
+        doc_id="DOC123",
+        title="Test Doc",
+        authors=["Test Author"],
+        creation_date=datetime.now(),
+        page_count=10,
+        language="en"
+    )
+    
+    return client
+
+
+@pytest.fixture
+def mock_pdf_processor():
+    """Create a mock PDFProcessor."""
+    mock_proc = MagicMock()
+    
+    # Setup metadata
+    mock_proc.doc.metadata = {
+        "title": "Test Document",
+        "author": "Test Author",
+        "creationDate": "D:20240201000000",
+        "language": "en"
+    }
+    
+    # Setup document properties
+    mock_proc.doc.__len__.return_value = 10
+    
+    # Setup text extraction
+    mock_proc.doc.__getitem__.return_value.get_text.return_value = "Sample text content"
+    
+    return mock_proc
+
+
+@pytest.fixture
+def corrupted_pdf_path(tmp_path):
+    """Create a corrupted PDF file for testing."""
+    pdf_path = tmp_path / "corrupted.pdf"
+    pdf_path.write_bytes(b"Not a valid PDF file")
+    return pdf_path
+
+
+@pytest.fixture
+def multiple_pdf_paths(tmp_path, sample_pdf_bytes):
+    """Create multiple PDF files for batch testing."""
+    paths = []
+    for i in range(3):
+        pdf_path = tmp_path / f"test_{i}.pdf"
+        pdf_path.write_bytes(sample_pdf_bytes)
+        paths.append(pdf_path)
+    return paths
+```
 </content>
 </file_2>
 
 <file_3>
-<path>test_processor.py</path>
+<path>ingestion_indexer/test_extraction.py</path>
 <content>
+```python
+"""Tests for PDF extraction functionality."""
+from unittest.mock import patch, Mock
+import pytest
 
-Error reading file: [Errno 2] No such file or directory: '/home/nicholasgrundl/projects/ragnostic/tests/test_processor.py'
+from ragnostic.ingestion.indexing.extraction import PDFExtractor
+
+
+def test_successful_metadata_extraction(mock_pdf_processor, sample_pdf_path):
+    """Test successful metadata extraction from PDF."""
+    
+
+
+def test_metadata_extraction_with_text(mock_pdf_processor, sample_pdf_path):
+    """Test metadata extraction with text preview."""
+
+
+
+def test_metadata_extraction_without_text(mock_pdf_processor, sample_pdf_path):
+    """Test metadata extraction without text preview."""
+
+
+
+def test_failed_metadata_extraction(corrupted_pdf_path):
+    """Test handling of failed metadata extraction."""
+
+
+
+def test_text_extraction_failure(mock_pdf_processor, sample_pdf_path):
+    """Test handling of text extraction failure."""
+
+
+
+def test_author_parsing():
+    """Test different author string formats."""
+
+
+
+def test_custom_preview_length(mock_pdf_processor, sample_pdf_path):
+    """Test custom text preview length."""
+
+
+
+def test_empty_metadata_handling(mock_pdf_processor, sample_pdf_path):
+    """Test handling of empty metadata fields."""
+
+```
 </content>
 </file_3>
 
 <file_4>
-<path>test_schema.py</path>
+<path>ingestion_indexer/test_indexer.py</path>
 <content>
+```python
+"""Tests for document indexer functionality."""
+from pathlib import Path
+from unittest.mock import patch, Mock
 
-Error reading file: [Errno 2] No such file or directory: '/home/nicholasgrundl/projects/ragnostic/tests/test_schema.py'
+import pytest
+from ragnostic.ingestion.indexing import DocumentIndexer
+from ragnostic.ingestion.indexing.schema import IndexingStatus
+from ragnostic.db.schema import DocumentCreate, DocumentMetadataCreate
+
+
+def test_indexer_initialization(mock_db_client):
+    """Test DocumentIndexer initialization."""
+    indexer = DocumentIndexer(mock_db_client)
+    assert indexer.db_client == mock_db_client
+    assert indexer.extractor is not None
+
+
+def test_successful_indexing(mock_db_client, mock_pdf_processor, sample_pdf_path):
+    """Test successful document indexing with metadata."""
+    
+
+
+def test_indexing_without_metadata(mock_db_client, mock_pdf_processor, sample_pdf_path):
+    """Test successful document indexing when metadata extraction fails."""
+    
+
+
+def test_indexing_with_database_error(mock_db_client, mock_pdf_processor, sample_pdf_path):
+    """Test handling of database errors during indexing."""
+    
+
+
+def test_batch_indexing_success(mock_db_client, mock_pdf_processor, multiple_pdf_paths):
+    """Test successful batch indexing of multiple documents."""
+    
+
+
+def test_batch_indexing_with_failures(mock_db_client, mock_pdf_processor, multiple_pdf_paths):
+    """Test batch indexing with mixed success and failures."""
+
+
+def test_indexing_with_corrupted_file(mock_db_client, corrupted_pdf_path):
+    """Test handling of corrupted PDF files."""
+
+
+def test_metadata_creation_error(mock_db_client, mock_pdf_processor, sample_pdf_path):
+    """Test handling of metadata creation errors."""
+
+
+def test_text_extraction_options(mock_db_client, mock_pdf_processor, sample_pdf_path):
+    """Test different text extraction configurations."""
+
+
+def test_empty_batch_indexing(mock_db_client):
+    """Test batch indexing with empty list."""
+```
 </content>
 </file_4>
 
 <file_5>
-<path>test_storage.py</path>
+<path>ingestion_indexer/test_schema.py</path>
 <content>
+```python
+"""Tests for indexing schema models."""
+from datetime import datetime
+from pathlib import Path
 
-Error reading file: [Errno 2] No such file or directory: '/home/nicholasgrundl/projects/ragnostic/tests/test_storage.py'
+import pytest
+from pydantic import ValidationError
+
+from ragnostic.ingestion.indexing.schema import (
+    DocumentMetadataExtracted,
+    IndexingResult,
+    BatchIndexingResult,
+    IndexingStatus,
+)
+
+
+def test_document_metadata_extracted_validation():
+    """Test DocumentMetadataExtracted validation."""
+    # Test valid metadata
+    metadata = DocumentMetadataExtracted(
+        title="Test Doc",
+        authors=["Author 1", "Author 2"],
+        creation_date=datetime.now(),
+        page_count=10,
+        language="en",
+        text_preview="Sample text"
+    )
+    assert metadata.title == "Test Doc"
+    assert len(metadata.authors) == 2
+    assert metadata.page_count == 10
+    
+    # Test optional fields
+    metadata = DocumentMetadataExtracted()
+    assert metadata.title is None
+    assert metadata.authors is None
+    
+    # Test invalid page count
+    with pytest.raises(ValidationError):
+        DocumentMetadataExtracted(page_count=-1)
+
+
+def test_indexing_result_validation():
+    """Test IndexingResult validation."""
+    # Test successful result
+    result = IndexingResult(
+        doc_id="DOC123",
+        filepath=Path("/path/test.pdf"),
+        status=IndexingStatus.SUCCESS
+    )
+    assert result.doc_id == "DOC123"
+    assert result.status == IndexingStatus.SUCCESS
+    assert result.error_message is None
+    
+    # Test failed result with error
+    result = IndexingResult(
+        doc_id="ERROR",
+        filepath=Path("/path/test.pdf"),
+        status=IndexingStatus.METADATA_ERROR,
+        error_message="Failed to extract metadata"
+    )
+    assert result.status == IndexingStatus.METADATA_ERROR
+    assert result.error_message == "Failed to extract metadata"
+    
+    # Test required fields
+    with pytest.raises(ValidationError):
+        IndexingResult(
+            filepath=Path("/path/test.pdf"),
+            status=IndexingStatus.SUCCESS
+        )
+
+
+def test_batch_indexing_result():
+    """Test BatchIndexingResult functionality."""
+    # Create some test results
+    success_result = IndexingResult(
+        doc_id="DOC1",
+        filepath=Path("/path/test1.pdf"),
+        status=IndexingStatus.SUCCESS
+    )
+    failed_result = IndexingResult(
+        doc_id="DOC2",
+        filepath=Path("/path/test2.pdf"),
+        status=IndexingStatus.METADATA_ERROR,
+        error_message="Extraction failed"
+    )
+    
+    # Test empty batch
+    batch = BatchIndexingResult()
+    assert batch.success_count == 0
+    assert batch.failure_count == 0
+    assert not batch.has_failures
+    
+    # Test mixed results
+    batch = BatchIndexingResult(
+        successful_docs=[success_result],
+        failed_docs=[failed_result]
+    )
+    assert batch.success_count == 1
+    assert batch.failure_count == 1
+    assert batch.has_failures
+    
+    # Test successful batch
+    batch = BatchIndexingResult(
+        successful_docs=[success_result, success_result]
+    )
+    assert batch.success_count == 2
+    assert batch.failure_count == 0
+    assert not batch.has_failures
+
+
+def test_indexing_status_values():
+    """Test IndexingStatus enumeration."""
+    # Test all status values
+    assert IndexingStatus.SUCCESS == "success"
+    assert IndexingStatus.METADATA_ERROR == "metadata_error"
+    assert IndexingStatus.EXTRACTION_ERROR == "extraction_error"
+    assert IndexingStatus.DATABASE_ERROR == "database_error"
+    assert IndexingStatus.UNKNOWN_ERROR == "unknown_error"
+    
+    # Test status comparison
+    assert IndexingStatus.SUCCESS != IndexingStatus.METADATA_ERROR
+    
+    # Test status in result
+    result = IndexingResult(
+        doc_id="DOC1",
+        filepath=Path("/path/test.pdf"),
+        status=IndexingStatus.SUCCESS
+    )
+    assert result.status == IndexingStatus.SUCCESS
+```
 </content>
 </file_5>
 
 <file_6>
-<path>ingestion_validation/__init__.py</path>
+<path>ingestion_processor/__init__.py</path>
 <content>
 ```python
 
@@ -48,6 +382,346 @@ Error reading file: [Errno 2] No such file or directory: '/home/nicholasgrundl/p
 </file_6>
 
 <file_7>
+<path>ingestion_processor/conftest.py</path>
+<content>
+```python
+"""Shared test fixtures for processor tests."""
+import pytest
+from pathlib import Path
+
+
+@pytest.fixture
+def sample_pdf_content():
+    """Sample PDF file content for testing."""
+    return b"%PDF-1.4\n%TEST PDF CONTENT"
+
+
+@pytest.fixture
+def create_pdf_file(tmp_path, sample_pdf_content):
+    """Factory fixture to create test PDF files."""
+    def _create_pdf(filename: str) -> Path:
+        file_path = tmp_path / filename
+        file_path.write_bytes(sample_pdf_content)
+        return file_path
+    return _create_pdf
+```
+</content>
+</file_7>
+
+<file_8>
+<path>ingestion_processor/test_processor.py</path>
+<content>
+```python
+"""Tests for document processor functionality."""
+from pathlib import Path
+import pytest
+from unittest.mock import patch, Mock
+
+from ragnostic.ingestion.processor.processor import DocumentProcessor
+from ragnostic.ingestion.processor.schema import ProcessingStatus
+
+
+@pytest.fixture
+def processor():
+    """Create a processor instance for testing."""
+    return DocumentProcessor(doc_id_prefix="TEST")
+
+
+@pytest.fixture
+def mock_files(tmp_path):
+    """Create mock files for testing."""
+    files = []
+    for i in range(3):
+        file_path = tmp_path / f"test{i}.pdf"
+        file_path.write_text(f"test content {i}")
+        files.append(file_path)
+    return files
+
+
+def test_process_single_document_success(processor, tmp_path, mock_files):
+    """Test successful processing of a single document."""
+    storage_dir = tmp_path / "storage"
+    storage_dir.mkdir()
+    
+    result = processor._process_single_document(
+        mock_files[0],
+        storage_dir
+    )
+    
+    assert result.status == ProcessingStatus.SUCCESS
+    assert result.storage_path.exists()
+    assert result.storage_path.parent == storage_dir
+    assert result.doc_id.startswith("TEST_")
+
+
+def test_process_single_document_failure(processor, tmp_path):
+    """Test processing failure with invalid file."""
+    storage_dir = tmp_path / "storage"
+    storage_dir.mkdir()
+    
+    result = processor._process_single_document(
+        Path("/nonexistent/file.pdf"),
+        storage_dir
+    )
+    
+    assert result.status == ProcessingStatus.STORAGE_ERROR
+    assert "Source file not found" in result.error_message
+    assert result.storage_path is None
+
+
+def test_process_documents_batch_success(processor, tmp_path, mock_files):
+    """Test successful processing of multiple documents."""
+    storage_dir = tmp_path / "storage"
+    storage_dir.mkdir()
+    
+    results = processor.process_documents(mock_files, storage_dir)
+    
+    assert results.success_count == len(mock_files)
+    assert results.failure_count == 0
+    assert not results.has_failures
+    
+    # Check all files were stored
+    for result in results.successful_docs:
+        assert result.storage_path.exists()
+        assert result.doc_id.startswith("TEST_")
+
+
+def test_process_documents_mixed_results(processor, tmp_path, mock_files):
+    """Test batch processing with some failures."""
+    storage_dir = tmp_path / "storage"
+    storage_dir.mkdir()
+    
+    # Add a non-existent file
+    test_files = mock_files + [Path("/nonexistent/file.pdf")]
+    
+    results = processor.process_documents(test_files, storage_dir)
+    
+    assert results.success_count == len(mock_files)
+    assert results.failure_count == 1
+    assert results.has_failures
+    
+    # Check successful files
+    for result in results.successful_docs:
+        assert result.storage_path.exists()
+    
+    # Check failed file
+    assert results.failed_docs[0].status == ProcessingStatus.STORAGE_ERROR
+    assert "Source file not found" in results.failed_docs[0].error_message
+
+
+@patch("ragnostic.ingestion.processor.processor.store_document")
+def test_process_documents_unexpected_error(mock_store, processor, tmp_path, mock_files):
+    """Test handling of unexpected errors during processing."""
+    storage_dir = tmp_path / "storage"
+    storage_dir.mkdir()
+    
+    # Simulate unexpected error
+    mock_store.side_effect = Exception("Unexpected error")
+    
+    results = processor.process_documents(mock_files, storage_dir)
+    
+    assert results.success_count == 0
+    assert results.failure_count == len(mock_files)
+    assert results.has_failures
+    
+    for result in results.failed_docs:
+        assert result.status == ProcessingStatus.UNKNOWN_ERROR
+        assert "Unexpected error" in result.error_message
+        assert result.error_code == "UNEXPECTED_ERROR"
+```
+</content>
+</file_8>
+
+<file_9>
+<path>ingestion_processor/test_schema.py</path>
+<content>
+```python
+"""Tests for processor schema models."""
+from pathlib import Path
+import pytest
+
+from ragnostic.ingestion.processor.schema import (
+    ProcessingStatus,
+    ProcessingResult,
+    BatchProcessingResult
+)
+
+
+def test_processing_result_creation():
+    """Test creating a ProcessingResult with minimal fields."""
+    result = ProcessingResult(
+        doc_id="DOC123",
+        original_path=Path("/tmp/test.pdf"),
+        status=ProcessingStatus.SUCCESS
+    )
+    
+    assert result.doc_id == "DOC123"
+    assert result.original_path == Path("/tmp/test.pdf")
+    assert result.status == ProcessingStatus.SUCCESS
+    assert result.error_message is None
+    assert result.error_code is None
+
+
+def test_processing_result_with_error():
+    """Test creating a ProcessingResult with error details."""
+    result = ProcessingResult(
+        doc_id="DOC123",
+        original_path=Path("/tmp/test.pdf"),
+        status=ProcessingStatus.STORAGE_ERROR,
+        error_message="Permission denied",
+        error_code="PERMISSION_ERROR"
+    )
+    
+    assert result.status == ProcessingStatus.STORAGE_ERROR
+    assert result.error_message == "Permission denied"
+    assert result.error_code == "PERMISSION_ERROR"
+
+
+def test_batch_processing_result_empty():
+    """Test creating an empty BatchProcessingResult."""
+    batch = BatchProcessingResult()
+    
+    assert len(batch.successful_docs) == 0
+    assert len(batch.failed_docs) == 0
+    assert batch.success_count == 0
+    assert batch.failure_count == 0
+    assert not batch.has_failures
+
+
+def test_batch_processing_result_with_docs():
+    """Test BatchProcessingResult with successful and failed documents."""
+    success_doc = ProcessingResult(
+        doc_id="DOC1",
+        original_path=Path("/tmp/success.pdf"),
+        storage_path=Path("/storage/DOC1.pdf"),
+        status=ProcessingStatus.SUCCESS
+    )
+    
+    failed_doc = ProcessingResult(
+        doc_id="DOC2",
+        original_path=Path("/tmp/failed.pdf"),
+        status=ProcessingStatus.STORAGE_ERROR,
+        error_message="Access denied"
+    )
+    
+    batch = BatchProcessingResult(
+        successful_docs=[success_doc],
+        failed_docs=[failed_doc]
+    )
+    
+    assert batch.success_count == 1
+    assert batch.failure_count == 1
+    assert batch.has_failures
+    assert batch.successful_docs[0].doc_id == "DOC1"
+    assert batch.failed_docs[0].doc_id == "DOC2"
+```
+</content>
+</file_9>
+
+<file_10>
+<path>ingestion_processor/test_storage.py</path>
+<content>
+```python
+"""Tests for document storage operations."""
+import os
+from pathlib import Path
+import pytest
+from unittest.mock import patch, mock_open
+
+from ragnostic.ingestion.processor.storage import store_document
+from ragnostic.ingestion.processor.schema import ProcessingStatus
+
+
+@pytest.fixture
+def temp_dir(tmp_path):
+    """Create a temporary directory for testing."""
+    return tmp_path
+
+
+@pytest.fixture
+def mock_source_file(temp_dir):
+    """Create a mock source file."""
+    source_file = temp_dir / "test.pdf"
+    source_file.write_text("test content")
+    return source_file
+
+
+def test_store_document_success(temp_dir, mock_source_file):
+    """Test successful document storage."""
+    storage_dir = temp_dir / "storage"
+    storage_dir.mkdir()
+    
+    result = store_document(
+        source_path=mock_source_file,
+        storage_dir=storage_dir,
+        doc_id="DOC123"
+    )
+    
+    assert result.status == ProcessingStatus.SUCCESS
+    assert result.storage_path == storage_dir / "DOC123.pdf"
+    assert result.storage_path.exists()
+    assert result.error_message is None
+
+
+def test_store_document_missing_source():
+    """Test storage with non-existent source file."""
+    result = store_document(
+        source_path=Path("/nonexistent/file.pdf"),
+        storage_dir=Path("/tmp"),
+        doc_id="DOC123"
+    )
+    
+    assert result.status == ProcessingStatus.STORAGE_ERROR
+    assert "Source file not found" in result.error_message
+    assert result.error_code == "SOURCE_NOT_FOUND"
+
+
+def test_store_document_invalid_storage_dir(mock_source_file):
+    """Test storage with invalid storage directory."""
+    result = store_document(
+        source_path=mock_source_file,
+        storage_dir=Path("/nonexistent/dir"),
+        doc_id="DOC123"
+    )
+    
+    assert result.status == ProcessingStatus.STORAGE_ERROR
+    assert "Storage directory invalid" in result.error_message
+    assert result.error_code == "INVALID_STORAGE_DIR"
+
+
+@pytest.mark.parametrize("error,expected_code", [
+    (PermissionError("Access denied"), "PERMISSION_DENIED"),
+    (OSError("I/O Error"), "STORAGE_FAILED"),
+])
+def test_store_document_errors(temp_dir, mock_source_file, error, expected_code):
+    """Test various error conditions during storage."""
+    storage_dir = temp_dir / "storage"
+    storage_dir.mkdir()
+    
+    with patch("ragnostic.ingestion.processor.storage.copy2", side_effect=error):
+        result = store_document(
+            source_path=mock_source_file,
+            storage_dir=storage_dir,
+            doc_id="DOC123"
+        )
+        
+        assert result.status == ProcessingStatus.STORAGE_ERROR
+        assert result.error_code == expected_code
+        assert str(error) in result.error_message
+```
+</content>
+</file_10>
+
+<file_11>
+<path>ingestion_validation/__init__.py</path>
+<content>
+```python
+
+```
+</content>
+</file_11>
+
+<file_12>
 <path>ingestion_validation/conftest.py</path>
 <content>
 ```python
@@ -126,9 +800,9 @@ def mock_db_client() -> DatabaseClient:
     return client
 ```
 </content>
-</file_7>
+</file_12>
 
-<file_8>
+<file_13>
 <path>ingestion_validation/test_checks.py</path>
 <content>
 ```python
@@ -261,9 +935,9 @@ def test_check_hash_unique(sample_pdf, large_pdf, mock_db_client):
 
 ```
 </content>
-</file_8>
+</file_13>
 
-<file_9>
+<file_14>
 <path>ingestion_validation/test_schema.py</path>
 <content>
 ```python
@@ -367,9 +1041,9 @@ def test_empty_batch_validation_result():
     assert len(batch.invalid_files) == 0
 ```
 </content>
-</file_9>
+</file_14>
 
-<file_10>
+<file_15>
 <path>ingestion_validation/test_validator.py</path>
 <content>
 ```python
@@ -497,9 +1171,9 @@ def test_batch_validation(mock_db_client, sample_pdf, corrupt_pdf, non_existent_
 
 ```
 </content>
-</file_10>
+</file_15>
 
-<file_11>
+<file_16>
 <path>test_db.py</path>
 <content>
 ```python
@@ -769,9 +1443,9 @@ def test_get_nonexistent_document(db_client: DatabaseClient):
 
 ```
 </content>
-</file_11>
+</file_16>
 
-<file_12>
+<file_17>
 <path>test_ingestion_monitor.py</path>
 <content>
 ```python
@@ -820,4 +1494,4 @@ def test_get_ingestible_files_file_as_dir(temp_dir_with_files):
     assert "not a directory" in result.error_message
 ```
 </content>
-</file_12>
+</file_17>

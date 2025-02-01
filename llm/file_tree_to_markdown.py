@@ -6,65 +6,104 @@ from typing import List, Optional
 
 
 def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
-    """Parse the tree file and extract base path and all file paths.
+    """Parse a tree-structure file and extract base path and file paths.
+    
+    The function handles tree files with the following format:
+    #!base_path=/path/to/base
+    folder1
+    ├── file1.txt
+    ├── subfolder
+    │   ├── file2.txt
+    │   └── file3.txt
+    └── file4.txt
     
     Args:
-        tree_file: Path to the file containing the tree structure.
+        tree_file: Path to the file containing the tree structure
         
     Returns:
         Tuple of (base_path, list of relative file paths)
+        
+    Raises:
+        ValueError: If no base path is found or file structure is invalid
     """
-    paths = []
-    current_dirs = []
-    base_path = None
-    prev_level = 0
+    # Initialize tracking variables
+    paths: List[str] = []           # List to store all file paths
+    current_dirs: List[str] = []    # Stack to track current directory path
+    base_path: Optional[Path] = None
+    prev_level = 0                  # Track previous line's indentation level
     
     with open(tree_file) as f:
-        for line in f:
+        for line_num, line in enumerate(f, 1):
+            # Clean the line
             line = line.rstrip('\n')
-
-            # Parse header for base path
+            
+            # Handle base path declaration
             if line.startswith("#!base_path="):
-                prefix, _, base_path = line.partition("=")
-                base_path = Path(base_path).resolve()
-                continue
-                
-            # Skip empty lines and lines with just tree characters
+                if base_path is not None:
+                    raise ValueError(f"Multiple base path declarations found at line {line_num}")
+                try:
+                    base_path = Path(line.split("=", 1)[1]).resolve()
+                    continue
+                except Exception as e:
+                    raise ValueError(f"Invalid base path at line {line_num}: {str(e)}")
+            
+            # Skip empty lines and purely decorative tree lines
             if not line.strip() or line.strip() in ['├──', '└──', '│']:
                 continue
-
-            # Count the actual indent level by looking at the tree characters
-            prefix, _, name = line.partition("─ ")
-            indent = len(prefix+_)
-            level = indent // 4
-            level_diff = prev_level - level
             
-            if '.' not in name:
-                is_dir = True
-            else:
-                is_dir = False
-            
-            if is_dir:
-                # Update current_dirs
-                if level_diff > 0: #rose up levels
-                    current_dirs = current_dirs[:-level_diff]
+            try:
+                # Parse the line structure
+                raw_prefix = line.split("─ ")[0] if "─ " in line else line
+                name = line.split("─ ")[-1].strip() if "─ " in line else line.strip()
+                
+                # Calculate indentation level
+                # Each level is typically 4 spaces (│   ) or similar
+                indent = len(raw_prefix)
+                level = indent // 4
+                
+                # Validate level change
+                level_diff = prev_level - level
+                if level > prev_level + 1:
+                    raise ValueError(
+                        f"Invalid indentation at line {line_num}: "
+                        f"Can't increase more than one level at once"
+                    )
+                
+                # Determine if item is a directory
+                # Consider it a directory if it has no extension or is a hidden folder
+                is_dir = ('.' not in name) or (name.startswith('.') and '/' not in name)
+                
+                if is_dir:
+                    # Handle directory entries
+                    if level_diff > 0:  # Moving up in the tree
+                        current_dirs = current_dirs[:-level_diff]
+                    current_dirs = current_dirs[:level]  # Trim to current level
                     current_dirs.append(name)
-                elif level_diff < 0: #dropped down levels
-                    current_dirs.append(name)
-            else:
-                # Update current_dirs
-                if level_diff > 0: #rose up levels
-                    current_dirs = current_dirs[:-level_diff]
-
-                full_path = str(Path().joinpath(*current_dirs) / name)
-                if full_path not in paths:  # Avoid duplicates
+                else:
+                    # Handle file entries
+                    if level_diff > 0:  # Moving up in the tree
+                        current_dirs = current_dirs[:-level_diff]
+                    current_dirs = current_dirs[:level]  # Trim to current level
+                    
+                    # Construct the relative path
+                    full_path = str(Path().joinpath(*current_dirs) / name)
+                    if full_path not in paths:  # Avoid duplicates
                         paths.append(full_path)
-
-            prev_level = level
+                
+                prev_level = level
+                
+            except Exception as e:
+                raise ValueError(
+                    f"Error parsing line {line_num}: '{line}'\n"
+                    f"Error: {str(e)}"
+                )
     
     if base_path is None:
-        raise ValueError("No base path found in tree file")
-        
+        raise ValueError("No base path declaration found in tree file")
+    
+    # Sort paths for consistent output
+    paths.sort()
+    
     return base_path, paths
 
 

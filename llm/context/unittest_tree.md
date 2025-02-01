@@ -1,5 +1,11 @@
 #!base_path=/home/nicholasgrundl/projects/ragnostic/tests
 tests
+├── ingestion_indexer
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── test_extraction.py
+│   ├── test_indexer.py
+│   └── test_schema.py
 ├── ingestion_processor
 │   ├── __init__.py
 │   ├── conftest.py
