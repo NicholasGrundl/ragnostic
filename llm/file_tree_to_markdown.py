@@ -47,13 +47,13 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
                 # Going back up the tree, remove directories from current path
                 current_dirs = current_dirs[:level]
             elif level == prev_level and current_dirs:
-                # Same level, replace last directory
+                # Same level, replace last directory if it exists
                 current_dirs.pop()
             
             # Add current item to path
             if name:  # Skip empty names
                 if '.' in name:  # It's a file
-                    full_path = '/'.join(current_dirs + [name])
+                    full_path = str(Path(*current_dirs) / name)
                     if full_path not in paths:  # Avoid duplicates
                         paths.append(full_path)
                 else:  # It's a directory
@@ -134,25 +134,26 @@ def generate_markdown(
                     '.yaml': 'yaml',
                     '.yml': 'yaml',
                     '.sh': 'bash',
+                    '.ipynb': 'json',
                 }.get(suffix, '')
                 
                 # Write the file contents
                 if suffix in {'.pdf', '.jpg', '.png', '.gif'}:
-                    out_f.write(f"*Binary file: {abs_path}*\n\n")
+                    out_f.write(f"*Binary file: {rel_path}*\n\n")
                 else:
-                    out_f.write(f"```{lang}\n")
                     try:
                         with open(abs_path) as in_f:
+                            out_f.write(f"```{lang}\n")
                             out_f.write(in_f.read())
-                        out_f.write("```\n\n")
+                            out_f.write("\n```\n\n")
                     except UnicodeDecodeError:
-                        out_f.write(f"*Binary file: {abs_path}*\n\n")
+                        out_f.write(f"*Binary file: {rel_path}*\n\n")
                     except FileNotFoundError:
-                        out_f.write(f"*File not found: {abs_path}*\n\n")
+                        out_f.write(f"*File not found: {rel_path}*\n\n")
                     except Exception as e:
-                        out_f.write(f"*Error reading file: {abs_path} - {str(e)}*\n\n")
+                        out_f.write(f"*Error reading file: {rel_path} - {str(e)}*\n\n")
             except Exception as e:
-                out_f.write(f"*Error processing file: {abs_path} - {str(e)}*\n\n")
+                out_f.write(f"*Error processing file: {rel_path} - {str(e)}*\n\n")
 
 
 def main():
