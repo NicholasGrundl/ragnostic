@@ -21,8 +21,7 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
     
     with open(tree_file) as f:
         for line in f:
-            line = line.rstrip('\n')
-            print(f"\n'{line}'")
+            line = line.strip() #remove trailing \n
 
             # Parse header for base path
             if line.startswith("#!base_path="):
@@ -38,38 +37,25 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
             prefix, _, name = line.partition("─ ")
             indent = len(prefix+_)
             level = indent // 4
-            level_diff = prev_level - level
-            
-            if '.' not in name:
-                is_dir = True
-            else:
-                is_dir = False
-            
-            if is_dir:
-                print(f"- im a dir")
-                print(f"- start {current_dirs=}")
-                print(f"- {level_diff=}")
-                # Update current_dirs
-                if level_diff > 0: #rose up levels
-                    current_dirs = current_dirs[:-level_diff]
-                    current_dirs.append(name)
-                elif level_diff < 0: #dropped down levels
-                    current_dirs.append(name)
-            else:
-                print(f"- im a file")
-                print(f"- start {current_dirs=}")
-                print(f"- {level_diff=}")
-                # Update current_dirs
-                if level_diff > 0: #rose up levels
-                    current_dirs = current_dirs[:-level_diff]
 
-                full_path = str(Path().joinpath(*current_dirs) / name)
-                if full_path not in paths:  # Avoid duplicates
+            # Handle directory structure
+            if level < prev_level:
+                # Going back up the tree, remove directories from current path
+                
+                current_dirs = current_dirs[:level-1]
+            elif level == prev_level and current_dirs:
+                # Same level, do nothing
+                pass
+
+            # Add current item to path
+            if name:  # Skip empty names
+                # Determine the current dir
+                if '.' not in name:  # It's a dir
+                    current_dirs.append(name)
+                else:  # It's a file
+                    full_path = str(Path().joinpath(*current_dirs) / name)
+                    if full_path not in paths:  # Avoid duplicates
                         paths.append(full_path)
-            print(f"- final {current_dirs=}")
-            
-            # print(line)
-            # print(f"- diff: {level_diff}")
 
             prev_level = level
     
