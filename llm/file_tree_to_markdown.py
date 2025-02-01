@@ -26,8 +26,8 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
                 base_path = Path(line.strip().split("=", 1)[1])
                 continue
 
-            # Skip empty lines
-            if not line.strip():
+            # Skip empty lines and lines with just tree characters
+            if not line.strip() or line.strip() in ['├──', '└──', '│']:
                 continue
             
             # Count the actual indent level by looking at the tree characters
@@ -46,18 +46,18 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
             if level < prev_level:
                 # Going back up the tree, remove directories from current path
                 current_dirs = current_dirs[:level]
-            elif level == prev_level:
+            elif level == prev_level and current_dirs:
                 # Same level, replace last directory
-                if current_dirs:
-                    current_dirs.pop()
-            # else: level > prev_level, we'll append the new directory
+                current_dirs.pop()
             
-            if '.' in name:  # It's a file
-                full_path = '/'.join(current_dirs + [name])
-                if full_path not in paths:  # Avoid duplicates
-                    paths.append(full_path)
-            else:  # It's a directory
-                current_dirs.append(name)
+            # Add current item to path
+            if name:  # Skip empty names
+                if '.' in name:  # It's a file
+                    full_path = '/'.join(current_dirs + [name])
+                    if full_path not in paths:  # Avoid duplicates
+                        paths.append(full_path)
+                else:  # It's a directory
+                    current_dirs.append(name)
             
             prev_level = level
     
@@ -136,17 +136,23 @@ def generate_markdown(
                     '.sh': 'bash',
                 }.get(suffix, '')
                 
-                out_f.write(f"```{lang}\n")
-                
                 # Write the file contents
-                with open(abs_path) as in_f:
-                    out_f.write(in_f.read())
-                
-                out_f.write("```\n\n")
-            except FileNotFoundError:
-                out_f.write(f"*File not found: {abs_path}*\n\n")
+                if suffix in {'.pdf', '.jpg', '.png', '.gif'}:
+                    out_f.write(f"*Binary file: {abs_path}*\n\n")
+                else:
+                    out_f.write(f"```{lang}\n")
+                    try:
+                        with open(abs_path) as in_f:
+                            out_f.write(in_f.read())
+                        out_f.write("```\n\n")
+                    except UnicodeDecodeError:
+                        out_f.write(f"*Binary file: {abs_path}*\n\n")
+                    except FileNotFoundError:
+                        out_f.write(f"*File not found: {abs_path}*\n\n")
+                    except Exception as e:
+                        out_f.write(f"*Error reading file: {abs_path} - {str(e)}*\n\n")
             except Exception as e:
-                out_f.write(f"*Error reading file: {abs_path} - {str(e)}*\n\n")
+                out_f.write(f"*Error processing file: {abs_path} - {str(e)}*\n\n")
 
 
 def main():
