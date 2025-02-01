@@ -7,6 +7,16 @@ src
     │   ├── models.py
     │   └── schema.py
     ├── ingestion
+    │   ├── indexing
+    │   │   ├── __init__.py
+    │   │   ├── extraction.py
+    │   │   ├── indexer.py
+    │   │   └── schema.py
+    │   ├── processor
+    │   │   ├── __init__.py
+    │   │   ├── processor.py
+    │   │   ├── schema.py
+    │   │   └── storage.py
     │   ├── validation
     │   │   ├── __init__.py
     │   │   ├── checks.py

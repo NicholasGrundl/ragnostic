@@ -498,15 +498,592 @@ DocumentSection.model_rebuild()
 </file_4>
 
 <file_5>
+<path>ragnostic/ingestion/indexing/__init__.py</path>
+<content>
+```python
+"""Document indexing package."""
+from .indexer import DocumentIndexer
+from .schema import IndexingResult, BatchIndexingResult, IndexingStatus
+
+__all__ = [
+    "DocumentIndexer",
+    "IndexingResult",
+    "BatchIndexingResult",
+    "IndexingStatus"
+]
+```
+</content>
+</file_5>
+
+<file_6>
+<path>ragnostic/ingestion/indexing/extraction.py</path>
+<content>
+```python
+"""PDF metadata and text extraction functionality."""
+import logging
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+import pymupdf4llm
+
+from .schema import DocumentMetadataExtracted
+
+logger = logging.getLogger(__name__)
+
+
+class PDFExtractor:
+    """Handles PDF metadata and text extraction using pymupdf4llm."""
+    
+    def __init__(self, 
+                 extract_text: bool = True,
+                 text_preview_chars: int = 1000):
+        """Initialize the PDF extractor.
+        
+        Args:
+            extract_text: Whether to extract text preview
+            text_preview_chars: Number of characters to extract for preview
+        """
+        self.extract_text = extract_text
+        self.text_preview_chars = text_preview_chars
+    
+    def extract_metadata(self, filepath: Path) -> Tuple[Optional[DocumentMetadataExtracted], Optional[str]]:
+        """Extract metadata and optional text preview from PDF.
+        
+        Args:
+            filepath: Path to PDF file
+            
+        Returns:
+            Tuple of (metadata, error_message)
+            If successful, error_message will be None
+        """
+        try:
+            # Open PDF with pymupdf4llm
+            pdf = pymupdf4llm.PDFProcessor(str(filepath))
+            
+            # Extract basic metadata
+            metadata = DocumentMetadataExtracted(
+                title=pdf.doc.metadata.get("title"),
+                authors=self._parse_authors(pdf.doc.metadata.get("author")),
+                creation_date=self._parse_date(pdf.doc.metadata.get("creationDate")),
+                page_count=len(pdf.doc),
+                language=pdf.doc.metadata.get("language")
+            )
+            
+            # Extract text preview if enabled
+            if self.extract_text:
+                try:
+                    # Get text from first page or until preview limit
+                    text = pdf.doc[0].get_text()
+                    if text:
+                        metadata.text_preview = text[:self.text_preview_chars]
+                except Exception as e:
+                    logger.warning(f"Text extraction failed: {e}")
+                    # Continue with metadata only
+            
+            return metadata, None
+            
+        except Exception as e:
+            error_msg = f"Metadata extraction failed: {str(e)}"
+            logger.error(error_msg)
+            return None, error_msg
+        
+    def _parse_authors(self, author_str: Optional[str]) -> Optional[List[str]]:
+        """Parse author string into list of authors."""
+        if not author_str:
+            return None
+        # Split on common separators and clean up
+        authors = [a.strip() for a in author_str.replace(";", ",").split(",")]
+        return [a for a in authors if a]  # Remove empty strings
+    
+    def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
+        """Parse PDF date string into datetime object."""
+        if not date_str:
+            return None
+        try:
+            # Handle common PDF date formats
+            # TODO: Implement proper PDF date parsing
+            return datetime.now()  # Placeholder
+        except Exception:
+            return None
+```
+</content>
+</file_6>
+
+<file_7>
+<path>ragnostic/ingestion/indexing/indexer.py</path>
+<content>
+```python
+"""Document indexing functionality."""
+import logging
+from pathlib import Path
+from typing import List, Optional
+
+from ragnostic.db.client import DatabaseClient
+from ragnostic.db.schema import Document, DocumentCreate, DocumentMetadata, DocumentMetadataCreate
+from ragnostic.ingestion.validation.checks import compute_file_hash
+import magic
+
+from .extraction import PDFExtractor
+from .schema import IndexingResult, BatchIndexingResult, IndexingStatus
+
+logger = logging.getLogger(__name__)
+
+
+class DocumentIndexer:
+    """Handles document indexing operations."""
+    
+    def __init__(self, 
+                 db_client: DatabaseClient,
+                 extract_text: bool = True,
+                 text_preview_chars: int = 1000):
+        """Initialize document indexer.
+        
+        Args:
+            db_client: Database client instance
+            extract_text: Whether to extract text preview
+            text_preview_chars: Number of characters for text preview
+        """
+        self.db_client = db_client
+        self.extractor = PDFExtractor(
+            extract_text=extract_text,
+            text_preview_chars=text_preview_chars
+        )
+    
+    def index_document(self, filepath: Path) -> IndexingResult:
+        """Index a single document with metadata.
+        
+        Args:
+            filepath: Path to document to index
+            
+        Returns:
+            IndexingResult with status and details
+        """
+        try:
+            # Get certain metadata
+            file_hash = compute_file_hash(filepath)
+            if not file_hash:
+                return IndexingResult(
+                    doc_id="ERROR",
+                    filepath=filepath,
+                    status=IndexingStatus.METADATA_ERROR,
+                    error_message="Failed to compute file hash"
+                )
+            
+            mime_type = magic.from_file(str(filepath), mime=True)
+            file_size = filepath.stat().st_size
+            
+            # Create document record
+            doc = DocumentCreate(
+                id=filepath.stem,  # Using filename as ID for now
+                raw_file_path=str(filepath),
+                file_hash=file_hash,
+                file_size_bytes=file_size,
+                mime_type=mime_type
+            )
+            
+            try:
+                db_doc = self.db_client.create_document(doc)
+            except ValueError as e:
+                return IndexingResult(
+                    doc_id=doc.id,
+                    filepath=filepath,
+                    status=IndexingStatus.DATABASE_ERROR,
+                    error_message=str(e)
+                )
+            
+            # Extract optional metadata
+            extracted_metadata, error = self.extractor.extract_metadata(filepath)
+            if extracted_metadata:
+                # Create metadata record
+                metadata = DocumentMetadataCreate(
+                    doc_id=db_doc.id,
+                    title=extracted_metadata.title,
+                    authors=extracted_metadata.authors,
+                    creation_date=extracted_metadata.creation_date,
+                    page_count=extracted_metadata.page_count,
+                    language=extracted_metadata.language
+                )
+                
+                try:
+                    self.db_client.create_metadata(metadata)
+                except ValueError as e:
+                    logger.warning(f"Failed to store metadata: {e}")
+                    # Continue without metadata
+            
+            return IndexingResult(
+                doc_id=db_doc.id,
+                filepath=filepath,
+                status=IndexingStatus.SUCCESS,
+                extracted_metadata=extracted_metadata
+            )
+            
+        except Exception as e:
+            error_msg = f"Indexing failed: {str(e)}"
+            logger.error(error_msg)
+            return IndexingResult(
+                doc_id="ERROR",
+                filepath=filepath,
+                status=IndexingStatus.UNKNOWN_ERROR,
+                error_message=error_msg
+            )
+    
+    def index_batch(self, filepaths: List[Path]) -> BatchIndexingResult:
+        """Index multiple documents.
+        
+        Args:
+            filepaths: List of paths to documents to index
+            
+        Returns:
+            BatchIndexingResult with combined results
+        """
+        results = BatchIndexingResult()
+        
+        for filepath in filepaths:
+            result = self.index_document(filepath)
+            if result.status == IndexingStatus.SUCCESS:
+                results.successful_docs.append(result)
+            else:
+                results.failed_docs.append(result)
+        
+        return results
+```
+</content>
+</file_7>
+
+<file_8>
+<path>ragnostic/ingestion/indexing/schema.py</path>
+<content>
+```python
+"""Schema definitions for document indexing."""
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import List, Optional
+from pydantic import BaseModel, Field
+
+
+class IndexingStatus(str, Enum):
+    """Status of document indexing operation."""
+    SUCCESS = "success"
+    METADATA_ERROR = "metadata_error"
+    EXTRACTION_ERROR = "extraction_error"
+    DATABASE_ERROR = "database_error"
+    UNKNOWN_ERROR = "unknown_error"
+
+
+class DocumentMetadataExtracted(BaseModel):
+    """Optional metadata that requires PDF parsing."""
+    title: Optional[str] = None
+    authors: Optional[List[str]] = None
+    creation_date: Optional[datetime] = None
+    page_count: Optional[int] = None
+    language: Optional[str] = None
+    text_preview: Optional[str] = Field(None, description="First page or N characters of text")
+
+    model_config = dict(arbitrary_types_allowed=True)
+
+
+class IndexingResult(BaseModel):
+    """Result of indexing a single document."""
+    doc_id: str
+    filepath: Path
+    status: IndexingStatus
+    error_message: Optional[str] = None
+    extracted_metadata: Optional[DocumentMetadataExtracted] = None
+    
+    model_config = dict(arbitrary_types_allowed=True)
+
+
+class BatchIndexingResult(BaseModel):
+    """Results from indexing multiple documents."""
+    successful_docs: List[IndexingResult] = Field(default_factory=list)
+    failed_docs: List[IndexingResult] = Field(default_factory=list)
+
+    @property
+    def has_failures(self) -> bool:
+        """Check if any documents failed indexing."""
+        return len(self.failed_docs) > 0
+
+    @property
+    def success_count(self) -> int:
+        """Get count of successfully indexed documents."""
+        return len(self.successful_docs)
+
+    @property
+    def failure_count(self) -> int:
+        """Get count of failed documents."""
+        return len(self.failed_docs)
+```
+</content>
+</file_8>
+
+<file_9>
+<path>ragnostic/ingestion/processor/__init__.py</path>
+<content>
+```python
+"""Document processor package."""
+from .processor import DocumentProcessor
+from .schema import ProcessingResult, BatchProcessingResult, ProcessingStatus
+
+__all__ = [
+    "DocumentProcessor",
+    "ProcessingResult", 
+    "BatchProcessingResult",
+    "ProcessingStatus"
+]
+```
+</content>
+</file_9>
+
+<file_10>
+<path>ragnostic/ingestion/processor/processor.py</path>
+<content>
+```python
+"""Document processing functionality."""
+import logging
+from pathlib import Path
+from typing import List
+
+from ragnostic.utils import create_doc_id
+from .schema import BatchProcessingResult, ProcessingResult, ProcessingStatus
+from .storage import store_document
+
+
+logger = logging.getLogger(__name__)
+
+
+class DocumentProcessor:
+    """Handles document processing and storage operations."""
+    
+    def __init__(self, doc_id_prefix: str = "DOC"):
+        """Initialize processor with configuration.
+        
+        Args:
+            doc_id_prefix: Prefix to use for document IDs
+        """
+        self.doc_id_prefix = doc_id_prefix
+    
+    def process_documents(
+        self,
+        file_paths: List[Path],
+        storage_dir: Path
+    ) -> BatchProcessingResult:
+        """Process a batch of validated documents.
+        
+        Args:
+            file_paths: List of paths to validated documents
+            storage_dir: Directory to store processed documents
+        
+        Returns:
+            BatchProcessingResult containing results for all documents
+        """
+        results = BatchProcessingResult()
+        
+        for file_path in file_paths:
+            try:
+                result = self._process_single_document(file_path, storage_dir)
+                
+                if result.status == ProcessingStatus.SUCCESS:
+                    results.successful_docs.append(result)
+                else:
+                    results.failed_docs.append(result)
+                    
+            except Exception as e:
+                logger.exception(f"Unexpected error processing {file_path}")
+                results.failed_docs.append(
+                    ProcessingResult(
+                        doc_id="ERROR",
+                        original_path=file_path,
+                        status=ProcessingStatus.UNKNOWN_ERROR,
+                        error_message=str(e),
+                        error_code="UNEXPECTED_ERROR"
+                    )
+                )
+        
+        return results
+    
+    def _process_single_document(
+        self,
+        file_path: Path,
+        storage_dir: Path
+    ) -> ProcessingResult:
+        """Process a single document.
+        
+        Args:
+            file_path: Path to document to process
+            storage_dir: Directory to store processed document
+        
+        Returns:
+            ProcessingResult with status and details
+        """
+        # Generate document ID
+        doc_id = create_doc_id(prefix=self.doc_id_prefix)
+        
+        # Store document
+        result = store_document(
+            source_path=file_path,
+            storage_dir=storage_dir,
+            doc_id=doc_id
+        )
+        
+        return result
+```
+</content>
+</file_10>
+
+<file_11>
+<path>ragnostic/ingestion/processor/schema.py</path>
+<content>
+```python
+"""Schema definitions for document processing."""
+from enum import Enum
+from pathlib import Path
+from typing import List, Optional
+from pydantic import BaseModel, Field
+
+
+class ProcessingStatus(str, Enum):
+    """Status of document processing operation."""
+    SUCCESS = "success"
+    STORAGE_ERROR = "storage_error"
+    COPY_ERROR = "copy_error"
+    RENAME_ERROR = "rename_error"
+    UNKNOWN_ERROR = "unknown_error"
+
+
+class ProcessingResult(BaseModel):
+    """Result of processing a single document."""
+    doc_id: str
+    original_path: Path
+    storage_path: Optional[Path] = None
+    status: ProcessingStatus
+    error_message: Optional[str] = None
+    error_code: Optional[str] = None
+
+    model_config = dict(arbitrary_types_allowed=True)
+
+
+class BatchProcessingResult(BaseModel):
+    """Results from processing multiple documents."""
+    successful_docs: List[ProcessingResult] = Field(default_factory=list)
+    failed_docs: List[ProcessingResult] = Field(default_factory=list)
+
+    model_config = dict(arbitrary_types_allowed=True)
+
+    @property
+    def has_failures(self) -> bool:
+        """Check if any documents failed processing."""
+        return len(self.failed_docs) > 0
+
+    @property
+    def success_count(self) -> int:
+        """Get count of successfully processed documents."""
+        return len(self.successful_docs)
+
+    @property
+    def failure_count(self) -> int:
+        """Get count of failed documents."""
+        return len(self.failed_docs)
+```
+</content>
+</file_11>
+
+<file_12>
+<path>ragnostic/ingestion/processor/storage.py</path>
+<content>
+```python
+"""Storage operations for document processing."""
+from pathlib import Path
+from shutil import copy2
+from typing import Optional
+
+from .schema import ProcessingStatus, ProcessingResult
+
+
+def store_document(
+    source_path: Path,
+    storage_dir: Path,
+    doc_id: str
+) -> ProcessingResult:
+    """Store document in the target location with proper error handling.
+    
+    Args:
+        source_path: Path to source document
+        storage_dir: Directory to store document in
+        doc_id: Generated document ID
+    
+    Returns:
+        ProcessingResult with status and details
+    """
+    # Create result with initial values
+    result = ProcessingResult(
+        doc_id=doc_id,
+        original_path=source_path,
+        status=ProcessingStatus.SUCCESS
+    )
+    
+    # Validate source file
+    if not source_path.is_file():
+        return result.model_copy(update={
+            "status": ProcessingStatus.STORAGE_ERROR,
+            "error_message": f"Source file not found: {source_path}",
+            "error_code": "SOURCE_NOT_FOUND"
+        })
+    
+    # Validate storage directory
+    if not storage_dir.is_dir():
+        return result.model_copy(update={
+            "status": ProcessingStatus.STORAGE_ERROR,
+            "error_message": f"Storage directory invalid: {storage_dir}",
+            "error_code": "INVALID_STORAGE_DIR"
+        })
+    
+    try:
+        # Generate destination path with original extension
+        suffix = source_path.suffix
+        dest_filename = f"{doc_id}{suffix}"
+        dest_path = storage_dir / dest_filename
+        
+        # Copy file preserving metadata
+        copy2(source_path, dest_path)
+        
+        return result.model_copy(update={
+            "storage_path": dest_path
+        })
+        
+    except PermissionError as e:
+        return result.model_copy(update={
+            "status": ProcessingStatus.STORAGE_ERROR,
+            "error_message": str(e),
+            "error_code": "PERMISSION_DENIED"
+        })
+    except OSError as e:
+        return result.model_copy(update={
+            "status": ProcessingStatus.STORAGE_ERROR,
+            "error_message": str(e),
+            "error_code": "STORAGE_FAILED"
+        })
+    except Exception as e:
+        return result.model_copy(update={
+            "status": ProcessingStatus.UNKNOWN_ERROR,
+            "error_message": str(e),
+            "error_code": "UNKNOWN"
+        })
+```
+</content>
+</file_12>
+
+<file_13>
 <path>ragnostic/ingestion/validation/__init__.py</path>
 <content>
 ```python
 
 ```
 </content>
-</file_5>
+</file_13>
 
-<file_6>
+<file_14>
 <path>ragnostic/ingestion/validation/checks.py</path>
 <content>
 ```python
@@ -614,9 +1191,9 @@ def check_hash_unique(filepath: Path, file_hash: str, db_client: DatabaseClient)
 
 ```
 </content>
-</file_6>
+</file_14>
 
-<file_7>
+<file_15>
 <path>ragnostic/ingestion/validation/schema.py</path>
 <content>
 ```python
@@ -665,9 +1242,9 @@ class BatchValidationResult(BaseModel):
         return len(self.invalid_files) > 0
 ```
 </content>
-</file_7>
+</file_15>
 
-<file_8>
+<file_16>
 <path>ragnostic/ingestion/validation/validator.py</path>
 <content>
 ```python
@@ -783,18 +1360,18 @@ class DocumentValidator:
         return results
 ```
 </content>
-</file_8>
+</file_16>
 
-<file_9>
+<file_17>
 <path>ragnostic/ingestion/__init__.py</path>
 <content>
 ```python
 
 ```
 </content>
-</file_9>
+</file_17>
 
-<file_10>
+<file_18>
 <path>ragnostic/ingestion/monitor.py</path>
 <content>
 ```python
@@ -862,9 +1439,9 @@ def get_ingestible_files(directory: str | Path) -> MonitorResult:
     )
 ```
 </content>
-</file_10>
+</file_18>
 
-<file_11>
+<file_19>
 <path>ragnostic/ingestion/schema.py</path>
 <content>
 ```python
@@ -909,9 +1486,9 @@ class SupportedFileType(str, Enum):
         return {member.value for member in cls}
 ```
 </content>
-</file_11>
+</file_19>
 
-<file_12>
+<file_20>
 <path>ragnostic/__init__.py</path>
 <content>
 ```python
@@ -920,9 +1497,9 @@ def main() -> None:
 
 ```
 </content>
-</file_12>
+</file_20>
 
-<file_13>
+<file_21>
 <path>ragnostic/dag_ingestion.py</path>
 <content>
 ```python
@@ -1019,9 +1596,9 @@ def indexing(state: State, db_connection: str) -> State:
 
 ```
 </content>
-</file_13>
+</file_21>
 
-<file_14>
+<file_22>
 <path>ragnostic/utils.py</path>
 <content>
 ```python
@@ -1177,4 +1754,4 @@ def rename_file(file_path: str | Path, new_name: str) -> FileOperationResult:
         )
 ```
 </content>
-</file_14>
+</file_22>

@@ -8,13 +8,19 @@
 ├── llm
 │   ├── artifacts
 │   │   ├── Evaluation System Technical Specification.md
+│   │   ├── ID_Manager_Refactor.md
 │   │   ├── Query Pipeline Technical Specification.md
-│   │   ├── Vector Storage Technical Specification.md
-│   │   └── system_prompt.md
+│   │   └── Vector Storage Technical Specification.md
 │   ├── context
-│   │   ├── file_content.md
-│   │   ├── file_tree.md
-│   │   └── repo_tree.md
+│   │   ├── repo_content.md
+│   │   ├── repo_tree.md
+│   │   ├── src_content.md
+│   │   ├── src_tree.md
+│   │   ├── unittest_content.md
+│   │   └── unittest_tree.md
+│   ├── prompts
+│   │   ├── implementation_chat_template.md
+│   │   └── scoping_system_prompt.md
 │   ├── file_tree.py
 │   └── file_tree_to_markdown.py
 ├── notebooks
@@ -54,6 +60,16 @@
 │       │   ├── models.py
 │       │   └── schema.py
 │       ├── ingestion
+│       │   ├── indexing
+│       │   │   ├── __init__.py
+│       │   │   ├── extraction.py
+│       │   │   ├── indexer.py
+│       │   │   └── schema.py
+│       │   ├── processor
+│       │   │   ├── __init__.py
+│       │   │   ├── processor.py
+│       │   │   ├── schema.py
+│       │   │   └── storage.py
 │       │   ├── validation
 │       │   │   ├── __init__.py
 │       │   │   ├── checks.py
@@ -66,7 +82,13 @@
 │       ├── dag_ingestion.py
 │       └── utils.py
 ├── tests
-│   ├── ingestion
+│   ├── ingestion_processor
+│   │   ├── __init__.py
+│   │   ├── conftest.py
+│   │   ├── test_processor.py
+│   │   ├── test_schema.py
+│   │   └── test_storage.py
+│   ├── ingestion_validation
 │   │   ├── __init__.py
 │   │   ├── conftest.py
 │   │   ├── test_checks.py
