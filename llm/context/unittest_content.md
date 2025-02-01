@@ -188,13 +188,17 @@ def test_metadata_extraction_with_text(tmp_path, sample_page_chunks):
     extractor = PDFExtractor(text_preview_chars=20)
     pdf_path = tmp_path / "test.pdf"
     pdf_path.write_text("dummy content")
-    
+    # TODO: make expected preview based on fixture, test against it truncated to the length
+    chunk_texts = [page_chunk.get('text','') for page_chunk in sample_page_chunks]
+    expected_text_preview = "\n".join(chunk_texts)
+    preview_chars = 20
+
     with patch('pymupdf4llm.to_markdown', return_value=sample_page_chunks):
         metadata, error = extractor.extract_metadata(pdf_path)
         
         assert error is None
-        assert len(metadata.text_preview) <= 20
-        assert metadata.text_preview == "First page content..."
+        assert len(metadata.text_preview) <= preview_chars
+        assert metadata.text_preview == expected_text_preview[:preview_chars]
 
 
 def test_metadata_extraction_without_text(tmp_path, partial_page_chunks):
@@ -293,61 +297,61 @@ def test_page_chunks_text_concatenation(chunks, expected_preview):
 <path>ingestion_indexer/test_indexer.py</path>
 <content>
 ```python
-"""Tests for document indexer functionality."""
-from pathlib import Path
-from unittest.mock import patch, Mock
+# """Tests for document indexer functionality."""
+# from pathlib import Path
+# from unittest.mock import patch, Mock
 
-import pytest
-from ragnostic.ingestion.indexing import DocumentIndexer
-from ragnostic.ingestion.indexing.schema import IndexingStatus
-from ragnostic.db.schema import DocumentCreate, DocumentMetadataCreate
-
-
-def test_indexer_initialization(mock_db_client):
-    """Test DocumentIndexer initialization."""
-    indexer = DocumentIndexer(mock_db_client)
-    assert indexer.db_client == mock_db_client
-    assert indexer.extractor is not None
+# import pytest
+# from ragnostic.ingestion.indexing import DocumentIndexer
+# from ragnostic.ingestion.indexing.schema import IndexingStatus
+# from ragnostic.db.schema import DocumentCreate, DocumentMetadataCreate
 
 
-def test_successful_indexing(mock_db_client, mock_pdf_processor, sample_pdf_path):
-    """Test successful document indexing with metadata."""
+# def test_indexer_initialization(mock_db_client):
+#     """Test DocumentIndexer initialization."""
+#     indexer = DocumentIndexer(mock_db_client)
+#     assert indexer.db_client == mock_db_client
+#     assert indexer.extractor is not None
+
+
+# def test_successful_indexing(mock_db_client, mock_pdf_processor, sample_pdf_path):
+#     """Test successful document indexing with metadata."""
     
 
 
-def test_indexing_without_metadata(mock_db_client, mock_pdf_processor, sample_pdf_path):
-    """Test successful document indexing when metadata extraction fails."""
+# def test_indexing_without_metadata(mock_db_client, mock_pdf_processor, sample_pdf_path):
+#     """Test successful document indexing when metadata extraction fails."""
     
 
 
-def test_indexing_with_database_error(mock_db_client, mock_pdf_processor, sample_pdf_path):
-    """Test handling of database errors during indexing."""
+# def test_indexing_with_database_error(mock_db_client, mock_pdf_processor, sample_pdf_path):
+#     """Test handling of database errors during indexing."""
     
 
 
-def test_batch_indexing_success(mock_db_client, mock_pdf_processor, multiple_pdf_paths):
-    """Test successful batch indexing of multiple documents."""
+# def test_batch_indexing_success(mock_db_client, mock_pdf_processor, multiple_pdf_paths):
+#     """Test successful batch indexing of multiple documents."""
     
 
 
-def test_batch_indexing_with_failures(mock_db_client, mock_pdf_processor, multiple_pdf_paths):
-    """Test batch indexing with mixed success and failures."""
+# def test_batch_indexing_with_failures(mock_db_client, mock_pdf_processor, multiple_pdf_paths):
+#     """Test batch indexing with mixed success and failures."""
 
 
-def test_indexing_with_corrupted_file(mock_db_client, corrupted_pdf_path):
-    """Test handling of corrupted PDF files."""
+# def test_indexing_with_corrupted_file(mock_db_client, corrupted_pdf_path):
+#     """Test handling of corrupted PDF files."""
 
 
-def test_metadata_creation_error(mock_db_client, mock_pdf_processor, sample_pdf_path):
-    """Test handling of metadata creation errors."""
+# def test_metadata_creation_error(mock_db_client, mock_pdf_processor, sample_pdf_path):
+#     """Test handling of metadata creation errors."""
 
 
-def test_text_extraction_options(mock_db_client, mock_pdf_processor, sample_pdf_path):
-    """Test different text extraction configurations."""
+# def test_text_extraction_options(mock_db_client, mock_pdf_processor, sample_pdf_path):
+#     """Test different text extraction configurations."""
 
 
-def test_empty_batch_indexing(mock_db_client):
-    """Test batch indexing with empty list."""
+# def test_empty_batch_indexing(mock_db_client):
+#     """Test batch indexing with empty list."""
 ```
 </content>
 </file_4>

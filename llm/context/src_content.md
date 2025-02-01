@@ -727,7 +727,7 @@ class PDFExtractor:
             - Handles missing or empty metadata fields
         """
         if not page_chunks:
-            return DocumentMetadataExtracted()
+            return DocumentMetadataExtracted(text_preview="") #without this it returns None..
         
         # Get metadata from first chunk as it contains document info
         first_chunk = page_chunks[0]
@@ -743,13 +743,14 @@ class PDFExtractor:
                 pass
                 
         # Build text preview from chunks
-        text_preview = ""
+        chunk_texts = []
         for chunk in page_chunks:
             if chunk_text := chunk.get('text', ''):
-                text_preview += chunk_text + "\n"
-                if len(text_preview) >= self.text_preview_chars:
-                    text_preview = text_preview[:self.text_preview_chars]
-                    break
+                chunk_texts.append(chunk_text)
+        
+        text_preview = "\n".join(chunk_texts)
+        if len(text_preview) >= self.text_preview_chars:
+            text_preview = text_preview[:self.text_preview_chars]
                         
         # Parse authors if present
         authors = self._parse_authors(metadata.get('author'))
