@@ -20,7 +20,8 @@
 │   │   └── unittest_tree.md
 │   ├── prompts
 │   │   ├── implementation_chat_template.md
-│   │   └── scoping_system_prompt.md
+│   │   ├── scoping_system_prompt.md
+│   │   └── unittest_chat_template.md
 │   ├── file_tree.py
 │   └── file_tree_to_markdown.py
 ├── notebooks

@@ -690,6 +690,9 @@ class PDFExtractor:
             logger.error(error_msg)
             return None, error_msg
         
+        return metadata, None
+            
+        
     def _parse_authors(self, author_str: Optional[str]) -> Optional[List[str]]:
         """Parse author string into list of authors."""
         if not author_str:

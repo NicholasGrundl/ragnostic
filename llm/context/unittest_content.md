@@ -116,6 +116,38 @@ def multiple_pdf_paths(tmp_path, sample_pdf_bytes):
         pdf_path.write_bytes(sample_pdf_bytes)
         paths.append(pdf_path)
     return paths
+
+@pytest.fixture
+def sample_page_chunks():
+    """Sample page chunks from pymupdf4llm."""
+    return [
+        {
+            'metadata': {
+                'title': 'Test Document',
+                'author': 'John Doe; Jane Smith',
+                'creationDate': 'D:20240201120000',
+                'language': 'en',
+                'page_count': 10
+            },
+            'text': 'First page content...'
+        },
+        {
+            'text': 'Second page content...'
+        }
+    ]
+
+@pytest.fixture
+def partial_page_chunks():
+    """Page chunks with partial metadata."""
+    return [
+        {
+            'metadata': {
+                'title': 'Test Document',
+                # Missing other fields
+            },
+            'text': 'Some content...'
+        }
+    ]
 ```
 </content>
 </file_2>
@@ -125,50 +157,134 @@ def multiple_pdf_paths(tmp_path, sample_pdf_bytes):
 <content>
 ```python
 """Tests for PDF extraction functionality."""
+from datetime import datetime
 from unittest.mock import patch, Mock
 import pytest
 
 from ragnostic.ingestion.indexing.extraction import PDFExtractor
 
 
-def test_successful_metadata_extraction(mock_pdf_processor, sample_pdf_path):
+def test_successful_metadata_extraction(tmp_path, sample_page_chunks):
     """Test successful metadata extraction from PDF."""
+    extractor = PDFExtractor()
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_text("dummy content")
     
+    with patch('pymupdf4llm.to_markdown', return_value=sample_page_chunks):
+        metadata, error = extractor.extract_metadata(pdf_path)
+        
+        assert error is None
+        assert metadata is not None
+        assert metadata.title == "Test Document"
+        assert len(metadata.authors) == 2
+        assert "John Doe" in metadata.authors
+        assert metadata.language == "en"
+        assert metadata.page_count == 10
+        assert metadata.text_preview.startswith("First page")
 
 
-def test_metadata_extraction_with_text(mock_pdf_processor, sample_pdf_path):
+def test_metadata_extraction_with_text(tmp_path, sample_page_chunks):
     """Test metadata extraction with text preview."""
+    extractor = PDFExtractor(text_preview_chars=20)
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_text("dummy content")
+    
+    with patch('pymupdf4llm.to_markdown', return_value=sample_page_chunks):
+        metadata, error = extractor.extract_metadata(pdf_path)
+        
+        assert error is None
+        assert len(metadata.text_preview) <= 20
+        assert metadata.text_preview == "First page content..."
 
 
-
-def test_metadata_extraction_without_text(mock_pdf_processor, sample_pdf_path):
+def test_metadata_extraction_without_text(tmp_path, partial_page_chunks):
     """Test metadata extraction without text preview."""
+    extractor = PDFExtractor(text_preview_chars=0)
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_text("dummy content")
+    
+    with patch('pymupdf4llm.to_markdown', return_value=partial_page_chunks):
+        metadata, error = extractor.extract_metadata(pdf_path)
+        
+        assert error is None
+        assert metadata.title == "Test Document"
+        assert metadata.authors is None
+        assert metadata.language is None
+        assert metadata.text_preview is not None
 
 
-
-def test_failed_metadata_extraction(corrupted_pdf_path):
+def test_failed_metadata_extraction(tmp_path):
     """Test handling of failed metadata extraction."""
+    extractor = PDFExtractor()
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_text("dummy content")
+    
+    with patch('pymupdf4llm.to_markdown', side_effect=Exception("PDF Error")):
+        metadata, error = extractor.extract_metadata(pdf_path)
+        
+        assert metadata is None
+        assert error is not None
+        assert "PDF Error" in error
 
 
-
-def test_text_extraction_failure(mock_pdf_processor, sample_pdf_path):
-    """Test handling of text extraction failure."""
-
-
-
-def test_author_parsing():
+@pytest.mark.parametrize("author_str,expected", [
+    ("John Doe; Jane Smith", ["John Doe", "Jane Smith"]),
+    ("John Doe, Jane Smith", ["John Doe", "Jane Smith"]),
+    ("Single Author", ["Single Author"]),
+    ("", None),
+    (None, None),
+])
+def test_author_parsing(author_str, expected):
     """Test different author string formats."""
+    extractor = PDFExtractor()
+    result = extractor._parse_authors(author_str)
+    assert result == expected
 
 
-
-def test_custom_preview_length(mock_pdf_processor, sample_pdf_path):
+def test_custom_preview_length(tmp_path, sample_page_chunks):
     """Test custom text preview length."""
+    extractor = PDFExtractor(text_preview_chars=10)
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_text("dummy content")
+    
+    with patch('pymupdf4llm.to_markdown', return_value=sample_page_chunks):
+        metadata, error = extractor.extract_metadata(pdf_path)
+        
+        assert error is None
+        assert len(metadata.text_preview) <= 10
+        assert metadata.text_preview == "First page"
 
 
-
-def test_empty_metadata_handling(mock_pdf_processor, sample_pdf_path):
+def test_empty_metadata_handling(tmp_path):
     """Test handling of empty metadata fields."""
+    extractor = PDFExtractor()
+    pdf_path = tmp_path / "test.pdf"
+    pdf_path.write_text("dummy content")
+    
+    empty_chunks = [{'metadata': {}, 'text': 'content'}]
+    with patch('pymupdf4llm.to_markdown', return_value=empty_chunks):
+        metadata, error = extractor.extract_metadata(pdf_path)
+        
+        assert error is None
+        assert metadata is not None
+        assert metadata.title is None
+        assert metadata.authors is None
+        assert metadata.creation_date is None
+        assert metadata.language is None
+        assert metadata.page_count is None
+        assert metadata.text_preview is not None
 
+
+@pytest.mark.parametrize("chunks,expected_preview", [
+    ([{'text': 'page1'}, {'text': 'page2'}], "page1\npage2"),
+    ([{}], ""),
+    ([], ""),
+])
+def test_page_chunks_text_concatenation(chunks, expected_preview):
+    """Test text concatenation from multiple page chunks."""
+    extractor = PDFExtractor()
+    metadata = extractor._parse_page_chunks(chunks)
+    assert metadata.text_preview.strip() == expected_preview.strip()
 ```
 </content>
 </file_3>

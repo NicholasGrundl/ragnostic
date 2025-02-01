@@ -103,3 +103,35 @@ def multiple_pdf_paths(tmp_path, sample_pdf_bytes):
         pdf_path.write_bytes(sample_pdf_bytes)
         paths.append(pdf_path)
     return paths
+
+@pytest.fixture
+def sample_page_chunks():
+    """Sample page chunks from pymupdf4llm."""
+    return [
+        {
+            'metadata': {
+                'title': 'Test Document',
+                'author': 'John Doe; Jane Smith',
+                'creationDate': 'D:20240201120000',
+                'language': 'en',
+                'page_count': 10
+            },
+            'text': 'First page content...'
+        },
+        {
+            'text': 'Second page content...'
+        }
+    ]
+
+@pytest.fixture
+def partial_page_chunks():
+    """Page chunks with partial metadata."""
+    return [
+        {
+            'metadata': {
+                'title': 'Test Document',
+                # Missing other fields
+            },
+            'text': 'Some content...'
+        }
+    ]
