@@ -10,7 +10,8 @@ def generate_file_tree(
     level: int = 10,  # Increased default depth
     exclude_suffixes: Optional[List[str]] = None,
     exclude_filenames: Optional[List[str]] = None,
-    include_base_path: bool = False
+    include_base_path: bool = False,
+    output_file: str | Path | None = None,
 ) -> str:
     """Generate a file tree string representation starting from the given directory.
     
@@ -20,7 +21,8 @@ def generate_file_tree(
         exclude_suffixes: List of file suffixes to exclude (default: None).
         exclude_filenames: List of filenames to exclude (default: None).
         include_base_path: Whether to include the base path in the output (default: False).
-    
+        output_file: (optional) Path where to write the markdown output. Otherwise text
+
     Returns:
         str: String representation of the file tree.
     
@@ -68,12 +70,23 @@ def generate_file_tree(
         
         return "\n".join(result)
     
-    tree = build_tree(root, level)
+    content = build_tree(root, level)
     if include_base_path:
         # Add header with absolute path
         header = f"#!base_path={root.resolve()}\n"
-        return header + tree
-    return tree
+        content = header + content
+    
+    
+    if output_file is None:
+        #print to screen
+        return content
+    
+    # Write to output file
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open('w', encoding='utf-8') as f:
+        f.write(content)
+    return None
 
 
 def main():
@@ -117,6 +130,13 @@ def main():
         help="Include the base path in the output"
     )
 
+    parser.add_argument(
+        "-o", "--output",
+        type=str,
+        default=None,
+        help="Output markdown file path"
+    )
+
     args = parser.parse_args()
     
     try:
@@ -126,6 +146,7 @@ def main():
             exclude_suffixes=args.exclude_suffixes,
             exclude_filenames=args.exclude_filenames,
             include_base_path=args.include_base_path,
+            output_file=Path(args.output) if args.output is not None else None,
         )
         print(tree)
     except ValueError as e:

@@ -16,11 +16,20 @@ jupyter:
 
 
 FILETREE_SCRIPT=./llm/file_tree.py
-FILETREE_OUTPUT=./llm/tree.md
-SOURCE_SCRIPT=./llm/file_tree_to_markdown.py
-SOURCE_OUTPUT=./llm/tree_source.md
-.PHONY: filetree
-filetree:filetree.src
+FILETREE_SRC=./llm/context/src_tree.md
+FILETREE_REPO=./llm/context/repo_tree.md
+CONTENT_SCRIPT=./llm/file_tree_to_markdown.py
+CONTENT_SRC=./llm/context/src_content.md
+CONTENT_REPO=./llm/context/repo_content.md
+
+.PHONY: context
+context: context.src
+
+.PHONY: context.src
+context.src:filetree.src content.src
+
+.PHONY: context.repo
+context.repo:filetree.repo content.repo
 
 .PHONY: filetree.src
 filetree.src:
@@ -30,7 +39,8 @@ filetree.src:
 		--exclude-suffixes .pyc .pyo .pyd \
 		--exclude-filenames __pycache__ .git .pytest_cache .env .venv node_modules .ipynb_checkpoints\
 		--include-base-path \
-	| tee $(FILETREE_OUTPUT)
+		-o $(FILETREE_SRC)
+
 
 .PHONY: filetree.repo
 filetree.repo:
@@ -40,12 +50,13 @@ filetree.repo:
 		--exclude-suffixes .pyc .pyo .pyd \
 		--exclude-filenames __pycache__ .git .pytest_cache .env .venv node_modules .ipynb_checkpoints data\
 		--include-base-path \
-	| tee $(FILETREE_OUTPUT)
+		-o $(FILETREE_REPO)
 
 
-.PHONY: source
-source:source.src
+.PHONY: content.src
+content.src:
+	@python $(CONTENT_SCRIPT) $(FILETREE_SRC) -o $(CONTENT_SRC)
 
-.PHONY: source.src
-source.src:
-	@python $(SOURCE_SCRIPT) $(FILETREE_OUTPUT) -o $(SOURCE_OUTPUT)
+.PHONY: content.repo
+content.repo:
+	@python $(CONTENT_SCRIPT) $(FILETREE_REPO) -o $(CONTENT_REPO)

@@ -21,7 +21,7 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
     
     with open(tree_file) as f:
         for line in f:
-            line = line.strip() #remove trailing \n
+            line = line.rstrip('\n')
 
             # Parse header for base path
             if line.startswith("#!base_path="):
@@ -37,24 +37,27 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
             prefix, _, name = line.partition("─ ")
             indent = len(prefix+_)
             level = indent // 4
-
-            # Handle directory structure
-            if level < prev_level:
-                # Going back up the tree, remove directories from current path
-                
-                current_dirs = current_dirs[:level-1]
-            elif level == prev_level and current_dirs:
-                # Same level, do nothing
-                pass
-
-            # Add current item to path
-            if name:  # Skip empty names
-                # Determine the current dir
-                if '.' not in name:  # It's a dir
+            level_diff = prev_level - level
+            
+            if '.' not in name:
+                is_dir = True
+            else:
+                is_dir = False
+            
+            if is_dir:
+                # Update current_dirs
+                if level_diff > 0: #rose up levels
+                    current_dirs = current_dirs[:-level_diff]
                     current_dirs.append(name)
-                else:  # It's a file
-                    full_path = str(Path().joinpath(*current_dirs) / name)
-                    if full_path not in paths:  # Avoid duplicates
+                elif level_diff < 0: #dropped down levels
+                    current_dirs.append(name)
+            else:
+                # Update current_dirs
+                if level_diff > 0: #rose up levels
+                    current_dirs = current_dirs[:-level_diff]
+
+                full_path = str(Path().joinpath(*current_dirs) / name)
+                if full_path not in paths:  # Avoid duplicates
                         paths.append(full_path)
 
             prev_level = level
@@ -67,7 +70,7 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
 
 def generate_markdown(
     tree_file: Path,
-    output_file: Path,
+    output_file: Path | None,
     exclude_suffixes: Optional[List[str]] = None,
     exclude_filenames: Optional[List[str]] = None
 ) -> None:
@@ -75,7 +78,7 @@ def generate_markdown(
     
     Args:
         tree_file: Path to the file containing the tree structure
-        output_file: Path where to write the markdown output
+        output_file: (optional) Path where to write the markdown output. Otherwise text
         exclude_suffixes: List of file suffixes to exclude
         exclude_filenames: List of filenames to exclude
     """
@@ -127,7 +130,7 @@ def generate_markdown(
         output_content.append(f"<file_{idx}>")
         output_content.append(f"<path>{file_path}</path>")
 
-        output_content.append(f"<content>")
+        output_content.append("<content>")
         # Process file content based on extension
         if abs_path.suffix.lower() in plaintext_extensions:
             suffix = Path(abs_path).suffix
@@ -146,17 +149,19 @@ def generate_markdown(
             output_content.append(
                 "\n[Content not displayed - Non-plaintext file]"
             )
-        output_content.append(f"</content>")
+        output_content.append("</content>")
         output_content.append(f"</file_{idx}>\n")
 
 
+    if output_file is None:
+        # Just print to screen
+        return '\n'.join(output_content)
+    
     # Write to output file
     output_path = Path(output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
     with output_path.open('w', encoding='utf-8') as f:
         f.write('\n'.join(output_content))
-
     return None
 
 
@@ -178,7 +183,7 @@ def main():
     parser.add_argument(
         "-o", "--output",
         type=str,
-        default="SOURCE_CODE.md",
+        default=None,
         help="Output markdown file path"
     )
     
@@ -201,7 +206,7 @@ def main():
     try:
         generate_markdown(
             tree_file=Path(args.tree_file),
-            output_file=Path(args.output),
+            output_file=Path(args.output) if args.output is not None else None,
             exclude_suffixes=args.exclude_suffixes,
             exclude_filenames=args.exclude_filenames
         )
