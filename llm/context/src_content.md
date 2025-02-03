@@ -2,100 +2,12 @@
 <path>ragnostic/__init__.py</path>
 <content>
 ```python
-def main() -> None:
-    print("Hello from ragnostic!")
 
 ```
 </content>
 </file_1>
 
 <file_2>
-<path>ragnostic/dag_ingestion.py</path>
-<content>
-```python
-import pathlib
-from burr.core import State, action, ApplicationBuilder
-
-from ragnostic.ingestion import utils
-
-@action(reads=[], writes=["ingestion_status","ingestion_filepaths"])
-def monitor(state: State, ingest_dir: str) -> State:
-    """Checks if directory has files to ingest"""
-    file_paths = []
-    # Check filepath is valid
-    return state
-
-@action(reads=["ingestion_filepaths"], writes=["valid_filepaths","invalid_filepaths"])
-def validation(state: State, db_connection:str) -> State:
-    """Check which files in the ingestion list are valid
-    - not duplicates, etc.
-    """
-    valid_filepaths = []
-    invalid_filepaths = []
-
-    for filepath in state.get("ingestion_filepaths"):
-        # Check duplicates
-        # check with hash against the database?
-        # - other checks?
-        is_valid=True
-
-        #move to list
-        if is_valid:
-            valid_filepaths.append(filepath)
-        else:
-            invalid_filepaths.append(filepath)
-
-    return state.update(
-        valid_filepaths=valid_filepaths, 
-        invalid_filepaths=invalid_filepaths,
-    )
-
-
-@action(reads=["valid_filepaths"], writes=["successful_docs","failed_docs"])
-def ingestion(state: State, storage_dir: str) -> State:
-    """Process a batch of documents, tracking successes and failures."""
-    
-    filepaths = state.get("valid_filepaths")
-    successful = []
-    failed = []
-    
-    for p in filepaths:
-        
-        # Move file to new location
-        copy_result = utils.copy_file(src_path=p, dest_dir=storage_dir)
-        if not copy_result.success:
-            failed.append((p, copy_result.error_code))
-            continue
-        # Generate new document ID and filename
-        doc_id = utils.create_doc_id(prefix="DOC")
-        suffix = pathlib.Path(p).suffix
-        doc_filename = f"{doc_id}{suffix}"
-        # Rename with document ID
-        rename_result = utils.rename_file(file_path=copy_result.filepath, new_name=doc_filename)
-        if not rename_result.success:
-            failed.append((rename_result.filepath, rename_result.error_code))
-            continue
-        successful.append(rename_result.filepath)
-    
-    return state.update(successful_docs=successful, failed_docs=failed)
-
-@action(reads=["successful_docs"], writes=["ingestion_status"])
-def indexing(state: State, db_connection: str) -> State:
-    """Update database with succesfully ingested docs"""
-    successful = state.get("successful_docs")
-
-    # Update database with all document ids
-    # - primary key is document id
-    # - filepath is storage path
-    # - should we add metadata here? put a status for further processing?
-    ingestion_status = "Completed"
-    return state.update(ingestion_status=ingestion_status)
-
-```
-</content>
-</file_2>
-
-<file_3>
 <path>ragnostic/db/__init__.py</path>
 <content>
 ```python
@@ -156,9 +68,9 @@ __all__ = [
 
 ```
 </content>
-</file_3>
+</file_2>
 
-<file_4>
+<file_3>
 <path>ragnostic/db/client.py</path>
 <content>
 ```python
@@ -198,7 +110,13 @@ class DatabaseClient:
             except IntegrityError:
                 session.rollback()
                 raise ValueError(f"Document with hash {document.file_hash} already exists")
-
+    
+    def get_documents(self, skip: int = 0, limit: int = 10) -> List[schema.Document]:
+        """Get all documents with pagination."""
+        with self.get_session() as session:
+            documents = session.query(models.Document).offset(skip).limit(limit).all()
+            return [schema.Document.model_validate(d) for d in documents]
+        
     def get_document_by_id(self, doc_id: str) -> Optional[schema.Document]:
         """Get document by ID."""
         with self.get_session() as session:
@@ -340,9 +258,9 @@ class DatabaseClient:
 
 ```
 </content>
-</file_4>
+</file_3>
 
-<file_5>
+<file_4>
 <path>ragnostic/db/models.py</path>
 <content>
 ```python
@@ -445,9 +363,9 @@ class DocumentTable(Base):
 
 ```
 </content>
-</file_5>
+</file_4>
 
-<file_6>
+<file_5>
 <path>ragnostic/db/schema.py</path>
 <content>
 ```python
@@ -592,18 +510,26 @@ class DocumentTable(DocumentTableBase):
 DocumentSection.model_rebuild()
 ```
 </content>
-</file_6>
+</file_5>
 
-<file_7>
+<file_6>
 <path>ragnostic/ingestion/__init__.py</path>
 <content>
 ```python
+"""Ingtestion package initialization."""
+from .workflow import *
+
+from .monitor import *
+from .validation import *
+from .processor import *
+from .indexing import *
+from .utils import create_doc_id
 
 ```
 </content>
-</file_7>
+</file_6>
 
-<file_8>
+<file_7>
 <path>ragnostic/ingestion/indexing/__init__.py</path>
 <content>
 ```python
@@ -619,9 +545,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_8>
+</file_7>
 
-<file_9>
+<file_8>
 <path>ragnostic/ingestion/indexing/extraction.py</path>
 <content>
 ```python
@@ -752,9 +678,9 @@ class PDFExtractor:
         )
 ```
 </content>
-</file_9>
+</file_8>
 
-<file_10>
+<file_9>
 <path>ragnostic/ingestion/indexing/indexer.py</path>
 <content>
 ```python
@@ -902,9 +828,9 @@ class DocumentIndexer:
         return results
 ```
 </content>
-</file_10>
+</file_9>
 
-<file_11>
+<file_10>
 <path>ragnostic/ingestion/indexing/schema.py</path>
 <content>
 ```python
@@ -969,9 +895,9 @@ class BatchIndexingResult(BaseModel):
         return len(self.failed_docs)
 ```
 </content>
-</file_11>
+</file_10>
 
-<file_12>
+<file_11>
 <path>ragnostic/ingestion/monitor/__init__.py</path>
 <content>
 ```python
@@ -987,9 +913,9 @@ __all__ = [
 
 ```
 </content>
-</file_12>
+</file_11>
 
-<file_13>
+<file_12>
 <path>ragnostic/ingestion/monitor/monitor.py</path>
 <content>
 ```python
@@ -1063,9 +989,9 @@ class DirectoryMonitor:
         )
 ```
 </content>
-</file_13>
+</file_12>
 
-<file_14>
+<file_13>
 <path>ragnostic/ingestion/monitor/schema.py</path>
 <content>
 ```python
@@ -1096,9 +1022,9 @@ class MonitorResult(BaseModel):
 
 ```
 </content>
-</file_14>
+</file_13>
 
-<file_15>
+<file_14>
 <path>ragnostic/ingestion/processor/__init__.py</path>
 <content>
 ```python
@@ -1114,9 +1040,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_15>
+</file_14>
 
-<file_16>
+<file_15>
 <path>ragnostic/ingestion/processor/processor.py</path>
 <content>
 ```python
@@ -1210,9 +1136,9 @@ class DocumentProcessor:
         return result
 ```
 </content>
-</file_16>
+</file_15>
 
-<file_17>
+<file_16>
 <path>ragnostic/ingestion/processor/schema.py</path>
 <content>
 ```python
@@ -1267,9 +1193,9 @@ class BatchProcessingResult(BaseModel):
         return len(self.failed_docs)
 ```
 </content>
-</file_17>
+</file_16>
 
-<file_18>
+<file_17>
 <path>ragnostic/ingestion/processor/storage.py</path>
 <content>
 ```python
@@ -1353,9 +1279,9 @@ def store_document(
     })
 ```
 </content>
-</file_18>
+</file_17>
 
-<file_19>
+<file_18>
 <path>ragnostic/ingestion/utils.py</path>
 <content>
 ```python
@@ -1389,18 +1315,28 @@ def create_doc_id(prefix: str = "DOC", size: int = 12, alphabet: str = DEFAULT_A
 
 ```
 </content>
-</file_19>
+</file_18>
 
-<file_20>
+<file_19>
 <path>ragnostic/ingestion/validation/__init__.py</path>
 <content>
 ```python
+"""Document processor package."""
+from .validator import DocumentValidator
+from .schema import ValidationResult, BatchValidationResult, ValidationCheckType, ValidationCheckFailure
 
+__all__ = [
+    "DocumentValidator",
+    "ValidationResult", 
+    "BatchValidationResult",
+    "ValidationCheckType",
+    "ValidationCheckFailure",
+]
 ```
 </content>
-</file_20>
+</file_19>
 
-<file_21>
+<file_20>
 <path>ragnostic/ingestion/validation/checks.py</path>
 <content>
 ```python
@@ -1508,9 +1444,9 @@ def check_hash_unique(filepath: Path, file_hash: str, db_client: DatabaseClient)
 
 ```
 </content>
-</file_21>
+</file_20>
 
-<file_22>
+<file_21>
 <path>ragnostic/ingestion/validation/schema.py</path>
 <content>
 ```python
@@ -1559,9 +1495,9 @@ class BatchValidationResult(BaseModel):
         return len(self.invalid_files) > 0
 ```
 </content>
-</file_22>
+</file_21>
 
-<file_23>
+<file_22>
 <path>ragnostic/ingestion/validation/validator.py</path>
 <content>
 ```python
@@ -1677,4 +1613,262 @@ class DocumentValidator:
         return results
 ```
 </content>
+</file_22>
+
+<file_23>
+<path>ragnostic/ingestion/workflow/__init__.py</path>
+<content>
+```python
+"""Workflow package initialization."""
+from .application import build_ingestion_workflow, run_ingestion
+from .actions import (
+    monitor_action,
+    validation_action,
+    processing_action,
+    indexing_action,
+)
+
+__all__ = [
+    # Main application builder
+    "build_ingestion_workflow",
+    "run_ingestion",
+
+    # Individual actions for custom workflows
+    "monitor_action",
+    "validation_action", 
+    "processing_action",
+    "indexing_action",
+]
+```
+</content>
 </file_23>
+
+<file_24>
+<path>ragnostic/ingestion/workflow/actions.py</path>
+<content>
+```python
+"""Action definitions for document ingestion workflow."""
+from pathlib import Path
+from typing import List
+
+from burr.core import State, action
+
+from ragnostic.db.client import DatabaseClient
+from ragnostic.ingestion.monitor import DirectoryMonitor, MonitorStatus
+from ragnostic.ingestion.validation import DocumentValidator
+from ragnostic.ingestion.processor import DocumentProcessor
+from ragnostic.ingestion.indexing import DocumentIndexer
+
+
+@action(reads=[], writes=["monitor_result","error"])
+def monitor_action(state: State, ingest_dir: str) -> State:
+    """Monitor directory for new files to process.
+    
+    Args:
+        state: Current workflow state
+        ingest_dir: Directory path to monitor
+        
+    Returns:
+        Updated state with monitor_result
+    """
+    monitor = DirectoryMonitor()
+    result = monitor.get_ingestible_files(ingest_dir)
+    
+    if result.status == MonitorStatus.ERROR:
+        return state.update(
+            monitor_result=result,
+            error=f"Monitor error: {result.error_message}"
+        )
+        
+    return state.update(monitor_result=result, error=None)
+
+
+@action(
+    reads=["monitor_result"],
+    writes=["validation_result","error"]
+)
+def validation_action(
+    state: State,
+    db_client: DatabaseClient,
+    max_file_size: int = 100 * 1024 * 1024  # 100MB default
+) -> State:
+    """Validate monitored files.
+    
+    Args:
+        state: Current workflow state
+        db_client: Database client for duplicate checks
+        max_file_size: Maximum allowed file size in bytes
+        
+    Returns:
+        Updated state with validation results
+    """
+    monitor_result = state.get("monitor_result")
+    if not monitor_result.has_files:
+        return state.update(
+            validation_result=None,
+            error="No files to validate"
+        )
+        
+    validator = DocumentValidator(
+        db_client=db_client,
+        max_file_size=max_file_size
+    )
+    
+    validation_result = validator.validate_files(monitor_result.files)
+    return state.update(validation_result=validation_result, error=None)
+
+
+@action(
+    reads=["validation_result"],
+    writes=["processing_result","error"]
+)
+def processing_action(state: State, storage_dir: str) -> State:
+    """Process validated documents.
+    
+    Args:
+        state: Current workflow state
+        storage_dir: Directory for processed document storage
+        
+    Returns:
+        Updated state with processing results
+    """
+    validation_result = state.get("validation_result")
+    if not validation_result or not validation_result.has_valid_files:
+        return state.update(
+            processing_result=None,
+            error="No valid files to process"
+        )
+    
+    # Get valid file paths
+    valid_files = [result.filepath for result in validation_result.valid_files]
+    
+    processor = DocumentProcessor()
+    processing_result = processor.process_documents(
+        file_paths=valid_files,
+        storage_dir=Path(storage_dir)
+    )
+    
+    return state.update(processing_result=processing_result, error=None)
+
+
+@action(
+    reads=["processing_result"],
+    writes=["indexing_result", "error"]
+)
+def indexing_action(
+    state: State,
+    db_client: DatabaseClient,
+    text_preview_chars: int = 1000
+) -> State:
+    """Index processed documents.
+    
+    Args:
+        state: Current workflow state
+        db_client: Database client for document indexing
+        text_preview_chars: Number of characters for text preview
+        
+    Returns:
+        Updated state with indexing results
+    """
+    processing_result = state.get("processing_result")
+    if processing_result is None or len(processing_result.successful_docs)==0:
+        return state.update(
+            indexing_result=None,
+            error="No successfully processed documents to index"
+        )
+    # Get successful document paths
+    successful_paths = [
+        Path(result.storage_path)
+        for result in processing_result.successful_docs
+    ]
+    
+    indexer = DocumentIndexer(
+        db_client=db_client,
+        text_preview_chars=text_preview_chars
+    )
+    
+    indexing_result = indexer.index_batch(successful_paths)
+    return state.update(indexing_result=indexing_result, error=None)
+```
+</content>
+</file_24>
+
+<file_25>
+<path>ragnostic/ingestion/workflow/application.py</path>
+<content>
+```python
+import pathlib
+from burr.core import ApplicationBuilder
+from ragnostic import ingestion
+from ragnostic import db
+
+def build_ingestion_workflow(
+    storage_dir: str = "./document_storage",
+    db_path: str | None = None,
+    max_file_size: int = 100 * 1024 * 1024,  # 100MB
+    text_preview_chars: int = 1000
+):
+    """Build the document ingestion workflow application.
+    
+    Args:
+        ingest_dir: Directory to monitor for new documents
+        storage_dir: Directory to store processed documents
+        db_path: Optional path to SQLite database. If None creates a new one
+        max_file_size: Maximum allowed file size in bytes
+        text_preview_chars: Number of characters for text preview
+        
+    Returns:
+        Configured workflow application
+    """
+    # Ensure directories exist
+    pathlib.Path(storage_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Create database client
+    db_url = db.create_sqlite_url(db_path)
+    db_client = db.DatabaseClient(db_url)
+    
+    # Build workflow
+    app = ApplicationBuilder()
+    
+    # Add monitor action
+    app = app.with_actions(
+        monitor=ingestion.monitor_action, 
+        validation=ingestion.validation_action.bind(db_client=db_client,max_file_size=max_file_size),
+        processing=ingestion.processing_action.bind(storage_dir=storage_dir), 
+        indexing=ingestion.indexing_action.bind(db_client=db_client, text_preview_chars=text_preview_chars),
+    )
+    
+    app = app.with_transitions(
+        ("monitor", "validation"),
+        ("validation", "processing"),
+        ("processing", "indexing"),
+    )
+    
+    app = app.with_entrypoint("monitor")
+
+
+    return app.build()
+
+def run_ingestion(ingest_dir = "./ingest", **kwargs):
+    """Run the document ingestion workflow.
+    
+    Args:
+        ingest_dir: Directory to monitor for new documents
+        **kwargs: Additional arguments for build_ingestion_workflow
+    """
+    # Default args from environment
+    storage_dir = kwargs.get('storage_dir', './storage')
+    db_path = kwargs.get('db_path', None)
+    max_file_size = kwargs.get('max_file_size', 100 * 1024 * 1024)  # 100MB
+    text_preview_chars = kwargs.get('text_preview_chars', 1000)
+
+    workflow = build_ingestion_workflow(**kwargs)
+    *_, state = workflow.run(
+        halt_after=['indexing'],
+        inputs={"ingest_dir": ingest_dir}
+    )
+    return state
+
+```
+</content>
+</file_25>
