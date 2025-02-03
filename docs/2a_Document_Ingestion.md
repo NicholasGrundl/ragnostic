@@ -24,11 +24,51 @@ The system is responsible for:
 
 ```mermaid
 flowchart LR
-    A[Document Monitor] --> B[Duplicate Check]
-    B --> C[Raw Storage]
-    C --> D[Document Library DB]
-    D --> E[Basic Processing]
-```
+    subgraph Monitor[Document Monitor]
+        direction TB
+        F[File Watcher] --> V[Basic Validation]
+    end
+    
+    subgraph Validate[Document Validation]
+        direction TB
+        H[Hash Check] --> M[Mime Check]
+        M --> S[Size Check]
+    end
+    
+    subgraph Raw[Raw Processing]
+        direction TB
+        ID[Doc ID Service] --> RS[Raw Storage]
+    end
+    
+    subgraph Index[Document Indexing]
+        direction TB
+        DB[Document DB] --> MC[Metadata Client]
+        MC --> BC[Basic Content]
+    end
+    
+    subgraph Status[Status Tracking]
+        direction TB
+        S1[Ingested] --> S2[Queued]
+    end
+    
+    Monitor --> Validate
+    Validate --> Raw
+    Raw --> Index
+    Index <--> Status
+
+    %% Styling
+    classDef monitor fill:#e1f5fe,stroke:#333,color:#000
+    classDef validate fill:#fff3e0,stroke:#333,color:#000
+    classDef raw fill:#f3e5f5,stroke:#333,color:#000
+    classDef index fill:#e8f5e9,stroke:#333,color:#000
+    classDef status fill:#fce4ec,stroke:#333,color:#000
+    
+    class F,V monitor
+    class H,M,S validate
+    class ID,RS raw
+    class DB,MC,BC index
+    class S1,S2 status
+```    
 
 ## 1. Document Monitor
 ### 1.1 File Monitor Service
@@ -37,26 +77,29 @@ flowchart LR
 - Basic validation:
   * File exists and is readable
   * Valid PDF format
-  * File size check
 
-### 1.2 Duplicate Detection
+## 2. Document Validation
+### 2.1 Duplicate Checks
 - Calculate file hash (SHA-256)
 - Check against existing document hashes in database
 - Skip ingestion if duplicate found
 
+### 2.2 Validation Checks
+- mime type
+- file size limits
+- not corrupted
 
 
 
-## 2. Raw Storage System
-### 2.1 Document id service
+## 3. Raw Processing
+### 3.1 Document id service
 Issues new document ids for valid documents
 - Move file to raw storage with new doc_id-based filename
 - Basic file system operations only
 - No complex processing at this stage
 - updates document database
 
-### 2.2 File Organization
-
+### 3.2 File Organization
 Raw document blobs are stored in a flat filesystem
 - will initially store locally
 - easy switch to S3 like storage (i.e. cloud)
@@ -66,13 +109,13 @@ Raw document blobs are stored in a flat filesystem
 └── {doc_id}.pdf
 ```
 
-
-## 3. Document Database
+## 4. Document Indexing
 
 ### 3.1 Document Database Core Schema
-For the ingestion process and raw file storage we maintain the mapping from rawa file to database entry
+For the indexing process and raw file storage we maintain the mapping from raw file to database entry
 -  metadata allows for search and retrieval
 
+**Document Core Schema**
 ```sql
 ------------------------------------------------------------------
 -- Core Document Management
@@ -101,6 +144,39 @@ CREATE TABLE document_metadata (
 );
 ```
 
+**Document ER Diagram**
+```mermaid
+erDiagram
+    Document ||--|| DocumentMetadata : has
+    Document ||--|| ProcessingStatus : tracks
+
+    Document {
+        string id PK
+        string raw_file_path
+        string file_hash
+        integer file_size_bytes
+        string mime_type
+        datetime ingestion_date
+    }
+
+    DocumentMetadata {
+        string doc_id PK, FK
+        string title
+        json authors
+        string description
+        datetime creation_date
+        integer page_count
+        string language
+    }
+
+    ProcessingStatus {
+        string doc_id PK, FK
+        string status
+        string error_message
+        datetime last_updated
+    }
+```
+
 ### 3.2 Document database python client
 - client for accessing database in python
 - document CRUD
@@ -108,170 +184,35 @@ CREATE TABLE document_metadata (
 - faceted filter on date ingested, etc.
 
 
+### 3.3 Basic Document processing
 
-## 4. Basic Processing
+Initial document extaraction is handled by the `pymupdf4llm` package. It pulls easily available raw text and metadata WIHTOUT complex dependencies. The primary role is:
+- Store the raw document for processing
+- Create initial document metadata entry
+- Initial content for basic or fuzzy search (keyword/queries)
+- Utilize minimal LLM or heavy pytorch code (can install as a small subset of package and use in many systems)
+- Is fast and failure proof
 
-### 4.1 Document database Proicessing schema
-```sql
-------------------------------------------------------------------
--- Document Content & Structure
-------------------------------------------------------------------
--- Document's physical section structure
-CREATE TABLE document_sections (
-    section_id TEXT PRIMARY KEY,
-    doc_id TEXT NOT NULL,
-    parent_section_id TEXT,
-    level INTEGER NOT NULL,                 -- Header level (1=H1, etc)
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    sequence_order INTEGER NOT NULL,        -- Order in document
-    page_start INTEGER,
-    page_end INTEGER,
-    FOREIGN KEY (doc_id) REFERENCES documents(id),
-    FOREIGN KEY (parent_section_id) REFERENCES document_sections(section_id)
-);
-
--- Document images
-CREATE TABLE document_images (
-    id INTEGER PRIMARY KEY,
-    doc_id TEXT NOT NULL,
-    section_id TEXT NOT NULL,
-    image_data TEXT NOT NULL,               -- Base64 encoded
-    caption TEXT,                           -- Extracted or generated caption
-    embedding_id TEXT,                      -- Vector store reference
-    page_number INTEGER NOT NULL,
-    FOREIGN KEY (doc_id) REFERENCES documents(id),
-    FOREIGN KEY (section_id) REFERENCES document_sections(section_id)
-);
-
--- Document tables
-CREATE TABLE document_tables (
-    id INTEGER PRIMARY KEY,
-    doc_id TEXT NOT NULL,
-    section_id TEXT NOT NULL,
-    caption TEXT,
-    table_data TEXT NOT NULL,               -- JSON structured data
-    page_number INTEGER NOT NULL,
-    FOREIGN KEY (doc_id) REFERENCES documents(id),
-    FOREIGN KEY (section_id) REFERENCES document_sections(section_id)
-);
-```
-
-### 4.2 PDF Processing
-- extract into pydantic using `docling` and `marker-pdf`
-- specify a explicit placeholder for images and tables in text
-- if palceholder not piossible use REGEX and add one
-- updates `document_sections` SQL table entry
-
-### 4.3 Wikipedia processing
-- extract text from website or url using `wikipedia` and `wikipedia-api`
-- specify place holder for images
-- updates `document_sections` SQL table entry
-
-### 4.4. Image and table processing
-- for each doc_id stores images and tables in database
-- updates the `document_images` and `document_tables` in database
-
-
-# WORKING ------------------------
 
 
 ## Error Handling
-### Basic Error Types
+### Ingestion Error Types
 1. File System Errors:
    - File not found
    - Permission denied
    - Storage full
+   - Invalid file permissions
 
-2. Processing Errors:
+2. Validation Errors:
    - Invalid file format
-   - Extraction failure
+   - File too large
+   - Duplicate document
+   - Corrupted file
 
-### Error Response
-- Log error details
-- Skip problematic documents
-- Continue processing others
+3. Database Errors:
+   - Metadata insertion failure
+   - Status tracking failure
+   - Document record creation failure
 
+Note: Document processing and extraction errors are handled by the Document Extraction system (see Document_Extraction.md)
 
-## Monitoring and Metrics
-### Basic Metrics
-- Number of documents ingested
-- Storage usage
-- Basic error counts
-- Processing success/failure rates
-
-### Implementation
-[Placeholder, needs work...]
-
-
-
-## Document Database Diagram
-
-```mermaid
-erDiagram
-    Document ||--|| DocumentMetadata : has
-    Document ||--o{ DocumentSection : contains
-    Document ||--o{ DocumentImage : has
-    Document ||--o{ DocumentTable : has
-    DocumentSection ||--|| SectionContent : has
-    DocumentSection ||--o{ DocumentSection : "parent of"
-    DocumentSection ||--o{ DocumentImage : contains
-    DocumentSection ||--o{ DocumentTable : contains
-
-    Document {
-        string id PK
-        string raw_file_path
-        string file_hash
-        integer file_size_bytes
-        datetime ingestion_date
-        integer total_sections
-        integer total_images
-        integer total_tables
-        integer total_pages
-    }
-
-    DocumentMetadata {
-        string doc_id PK, FK
-        string title
-        json authors
-        string language
-        datetime creation_date
-    }
-
-    DocumentSection {
-        string section_id PK
-        string doc_id FK
-        string parent_section_id FK
-        integer level
-        integer sequence_order
-        integer word_count
-        integer image_count
-        integer table_count
-    }
-
-    SectionContent {
-        string section_id PK, FK
-        string title
-        text content
-        integer page_start
-        integer page_end
-    }
-
-    DocumentImage {
-        integer id PK
-        string doc_id FK
-        string section_id FK
-        integer page_number
-        text image_data
-        text caption
-    }
-
-    DocumentTable {
-        integer id PK
-        string doc_id FK
-        string section_id FK
-        integer page_number
-        json table_data
-        text caption
-    }
-```    
