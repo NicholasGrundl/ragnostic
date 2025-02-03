@@ -29,3 +29,16 @@ Document search and retrieval client
 - run standard query using vectors and chunks
 
 
+# Action Items DevOps:
+
+## CI/CD
+
+- setup linting and formatting make commands
+- setup a build command on merge to main (check github actions?)
+
+## Testing
+
+- setup test commands with parameterize.mark tags
+- unittest or fast tests tag
+- slow tests/ integration tests
+- setup make commands for testing
