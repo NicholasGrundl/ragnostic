@@ -1,7 +1,7 @@
 """Document indexing functionality."""
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from ragnostic.db.client import DatabaseClient
 from ragnostic.db.schema import Document, DocumentCreate, DocumentMetadata, DocumentMetadataCreate
@@ -17,9 +17,10 @@ logger = logging.getLogger(__name__)
 class DocumentIndexer:
     """Handles document indexing operations."""
     
+    SUPPORTED_MIME_TYPES: Set[str] = {'application/pdf', 'application/x-pdf'}
+
     def __init__(self, 
                  db_client: DatabaseClient,
-                 extract_text: bool = True,
                  text_preview_chars: int = 1000):
         """Initialize document indexer.
         
@@ -30,7 +31,6 @@ class DocumentIndexer:
         """
         self.db_client = db_client
         self.extractor = PDFExtractor(
-            extract_text=extract_text,
             text_preview_chars=text_preview_chars
         )
     
@@ -44,6 +44,16 @@ class DocumentIndexer:
             IndexingResult with status and details
         """
         try:
+            # Validate mime type first
+            mime_type = magic.from_file(str(filepath), mime=True)
+            if mime_type not in self.SUPPORTED_MIME_TYPES:
+                return IndexingResult(
+                    doc_id=filepath.stem,
+                    filepath=filepath,
+                    status=IndexingStatus.METADATA_ERROR,
+                    error_message=f"Unsupported file type: {mime_type}"
+                )
+            
             # Get certain metadata
             file_hash = compute_file_hash(filepath)
             if not file_hash:
@@ -54,7 +64,6 @@ class DocumentIndexer:
                     error_message="Failed to compute file hash"
                 )
             
-            mime_type = magic.from_file(str(filepath), mime=True)
             file_size = filepath.stat().st_size
             
             # Create document record
