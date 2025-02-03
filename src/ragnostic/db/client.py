@@ -34,7 +34,13 @@ class DatabaseClient:
             except IntegrityError:
                 session.rollback()
                 raise ValueError(f"Document with hash {document.file_hash} already exists")
-
+    
+    def get_documents(self, skip: int = 0, limit: int = 10) -> List[schema.Document]:
+        """Get all documents with pagination."""
+        with self.get_session() as session:
+            documents = session.query(models.Document).offset(skip).limit(limit).all()
+            return [schema.Document.model_validate(d) for d in documents]
+        
     def get_document_by_id(self, doc_id: str) -> Optional[schema.Document]:
         """Get document by ID."""
         with self.get_session() as session:

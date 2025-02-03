@@ -608,15 +608,121 @@ def test_indexing_status_values():
 </file_5>
 
 <file_6>
-<path>ingestion_processor/__init__.py</path>
+<path>ingestion_monitor/__init__.py</path>
 <content>
 ```python
+"""Monitor tests package."""
 
 ```
 </content>
 </file_6>
 
 <file_7>
+<path>ingestion_monitor/conftest.py</path>
+<content>
+```python
+"""Test fixtures for monitor tests."""
+import pytest
+from pathlib import Path
+
+@pytest.fixture
+def temp_dir_with_files(tmp_path):
+    """Create a temporary directory with test files."""
+    # Create test files
+    (tmp_path / "test1.pdf").touch()
+    (tmp_path / "test2.PDF").touch()
+    (tmp_path / "test3.txt").touch()  # Should be ignored
+    
+    return tmp_path
+
+```
+</content>
+</file_7>
+
+<file_8>
+<path>ingestion_monitor/test_monitor.py</path>
+<content>
+```python
+"""Tests for directory monitor functionality."""
+from pathlib import Path
+import pytest
+
+from ragnostic.ingestion.monitor import DirectoryMonitor, MonitorStatus
+
+def test_monitor_initialization():
+    """Test DirectoryMonitor initialization."""
+    # Test default extensions
+    monitor = DirectoryMonitor()
+    assert '.pdf' in monitor.supported_extensions
+    assert '.PDF' in monitor.supported_extensions
+    
+    # Test custom extensions
+    custom_extensions = {'.txt', '.doc'}
+    monitor = DirectoryMonitor(supported_extensions=custom_extensions)
+    assert monitor.supported_extensions == custom_extensions
+
+def test_get_ingestible_files_with_pdfs(temp_dir_with_files):
+    """Test finding PDF files in directory."""
+    monitor = DirectoryMonitor()
+    result = monitor.get_ingestible_files(temp_dir_with_files)
+    
+    assert result.status == MonitorStatus.MONITORING
+    assert len(result.files) == 2
+    assert all(isinstance(f, Path) for f in result.files)
+    assert all(f.suffix.lower() == '.pdf' for f in result.files)
+
+def test_get_ingestible_files_nonexistent_dir():
+    """Test handling of non-existent directory."""
+    monitor = DirectoryMonitor()
+    result = monitor.get_ingestible_files("/nonexistent/path")
+    
+    assert result.status == MonitorStatus.ERROR
+    assert "does not exist" in result.error_message
+
+def test_get_ingestible_files_file_as_dir(temp_dir_with_files):
+    """Test handling when path points to a file instead of directory."""
+    monitor = DirectoryMonitor()
+    file_path = temp_dir_with_files / "test1.pdf"
+    result = monitor.get_ingestible_files(file_path)
+    
+    assert result.status == MonitorStatus.ERROR
+    assert "not a directory" in result.error_message
+
+def test_get_ingestible_files_permission_error(tmp_path, monkeypatch):
+    """Test handling of permission errors."""
+    monitor = DirectoryMonitor()
+    
+    def mock_iterdir(*args):
+        raise PermissionError("Access denied")
+    
+    monkeypatch.setattr(Path, "iterdir", mock_iterdir)
+    result = monitor.get_ingestible_files(tmp_path)
+    
+    assert result.status == MonitorStatus.ERROR
+    assert "Permission denied" in result.error_message
+
+def test_get_ingestible_files_custom_extensions(temp_dir_with_files):
+    """Test finding files with custom extensions."""
+    monitor = DirectoryMonitor(supported_extensions={'.txt'})
+    result = monitor.get_ingestible_files(temp_dir_with_files)
+    
+    assert result.status == MonitorStatus.MONITORING
+    assert len(result.files) == 1
+    assert all(f.suffix == '.txt' for f in result.files)
+```
+</content>
+</file_8>
+
+<file_9>
+<path>ingestion_processor/__init__.py</path>
+<content>
+```python
+
+```
+</content>
+</file_9>
+
+<file_10>
 <path>ingestion_processor/conftest.py</path>
 <content>
 ```python
@@ -641,9 +747,9 @@ def create_pdf_file(tmp_path, sample_pdf_content):
     return _create_pdf
 ```
 </content>
-</file_7>
+</file_10>
 
-<file_8>
+<file_11>
 <path>ingestion_processor/test_processor.py</path>
 <content>
 ```python
@@ -765,9 +871,9 @@ def test_process_documents_unexpected_error(mock_store, processor, tmp_path, moc
         assert result.error_code == "UNEXPECTED_ERROR"
 ```
 </content>
-</file_8>
+</file_11>
 
-<file_9>
+<file_12>
 <path>ingestion_processor/test_schema.py</path>
 <content>
 ```python
@@ -851,9 +957,9 @@ def test_batch_processing_result_with_docs():
     assert batch.failed_docs[0].doc_id == "DOC2"
 ```
 </content>
-</file_9>
+</file_12>
 
-<file_10>
+<file_13>
 <path>ingestion_processor/test_storage.py</path>
 <content>
 ```python
@@ -945,18 +1051,18 @@ def test_store_document_errors(temp_dir, mock_source_file, error, expected_code)
         assert str(error) in result.error_message
 ```
 </content>
-</file_10>
+</file_13>
 
-<file_11>
+<file_14>
 <path>ingestion_validation/__init__.py</path>
 <content>
 ```python
 
 ```
 </content>
-</file_11>
+</file_14>
 
-<file_12>
+<file_15>
 <path>ingestion_validation/conftest.py</path>
 <content>
 ```python
@@ -1035,9 +1141,9 @@ def mock_db_client() -> DatabaseClient:
     return client
 ```
 </content>
-</file_12>
+</file_15>
 
-<file_13>
+<file_16>
 <path>ingestion_validation/test_checks.py</path>
 <content>
 ```python
@@ -1170,9 +1276,9 @@ def test_check_hash_unique(sample_pdf, large_pdf, mock_db_client):
 
 ```
 </content>
-</file_13>
+</file_16>
 
-<file_14>
+<file_17>
 <path>ingestion_validation/test_schema.py</path>
 <content>
 ```python
@@ -1276,9 +1382,9 @@ def test_empty_batch_validation_result():
     assert len(batch.invalid_files) == 0
 ```
 </content>
-</file_14>
+</file_17>
 
-<file_15>
+<file_18>
 <path>ingestion_validation/test_validator.py</path>
 <content>
 ```python
@@ -1406,9 +1512,9 @@ def test_batch_validation(mock_db_client, sample_pdf, corrupt_pdf, non_existent_
 
 ```
 </content>
-</file_15>
+</file_18>
 
-<file_16>
+<file_19>
 <path>test_db.py</path>
 <content>
 ```python
@@ -1678,55 +1784,25 @@ def test_get_nonexistent_document(db_client: DatabaseClient):
 
 ```
 </content>
-</file_16>
+</file_19>
 
-<file_17>
-<path>test_ingestion_monitor.py</path>
+<file_20>
+<path>test_ingestion_utils.py</path>
 <content>
 ```python
 """Tests for the ingestion monitor functionality."""
 from pathlib import Path
 import pytest
-from ragnostic.ingestion.monitor import get_ingestible_files
-from ragnostic.ingestion.schema import IngestionStatus
+
+from ragnostic.ingestion import utils
+
+@pytest.mark.parametrize("prefix", ["DOC", "ID", "PREFIX"])
+def test_create_doc_id(prefix):
+    """Test that the create_doc_id function returns a string with the correct prefix."""
+    doc_id = utils.create_doc_id(prefix=prefix)
+    assert doc_id.startswith(prefix)
 
 
-@pytest.fixture
-def temp_dir_with_files(tmp_path):
-    """Create a temporary directory with some test files."""
-    # Create test files
-    (tmp_path / "test1.pdf").touch()
-    (tmp_path / "test2.PDF").touch()
-    (tmp_path / "test3.txt").touch()  # Should be ignored
-    
-    return tmp_path
-
-
-def test_get_ingestible_files_with_pdfs(temp_dir_with_files):
-    """Test finding PDF files in directory."""
-    result = get_ingestible_files(temp_dir_with_files)
-    
-    assert result.status == IngestionStatus.MONITORING
-    assert len(result.files) == 2
-    assert all(isinstance(f, Path) for f in result.files)
-    assert all(f.suffix.lower() == '.pdf' for f in result.files)
-
-
-def test_get_ingestible_files_nonexistent_dir():
-    """Test handling of non-existent directory."""
-    result = get_ingestible_files("/nonexistent/path")
-    
-    assert result.status == IngestionStatus.ERROR
-    assert "does not exist" in result.error_message
-
-
-def test_get_ingestible_files_file_as_dir(temp_dir_with_files):
-    """Test handling when path points to a file instead of directory."""
-    file_path = temp_dir_with_files / "test1.pdf"
-    result = get_ingestible_files(file_path)
-    
-    assert result.status == IngestionStatus.ERROR
-    assert "not a directory" in result.error_message
 ```
 </content>
-</file_17>
+</file_20>

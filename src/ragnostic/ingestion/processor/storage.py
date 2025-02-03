@@ -53,10 +53,6 @@ def store_document(
         # Copy file preserving metadata
         copy2(source_path, dest_path)
         
-        return result.model_copy(update={
-            "storage_path": dest_path
-        })
-        
     except PermissionError as e:
         return result.model_copy(update={
             "status": ProcessingStatus.STORAGE_ERROR,
@@ -75,3 +71,8 @@ def store_document(
             "error_message": str(e),
             "error_code": "UNKNOWN"
         })
+    
+    # Success
+    return result.model_copy(update={
+        "storage_path": dest_path
+    })

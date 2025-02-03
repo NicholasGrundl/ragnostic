@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from typing import List
 
-from ragnostic.utils import create_doc_id
+from ragnostic.ingestion.utils import create_doc_id
 from .schema import BatchProcessingResult, ProcessingResult, ProcessingStatus
 from .storage import store_document
 

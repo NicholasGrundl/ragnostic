@@ -16,27 +16,14 @@ def main() -> None:
 import pathlib
 from burr.core import State, action, ApplicationBuilder
 
-from ragnostic import utils
+from ragnostic.ingestion import utils
 
 @action(reads=[], writes=["ingestion_status","ingestion_filepaths"])
 def monitor(state: State, ingest_dir: str) -> State:
     """Checks if directory has files to ingest"""
     file_paths = []
     # Check filepath is valid
-    path = pathlib.Path(ingest_dir)
-    if (path.exists()) and (path.is_dir()):
-        for p in path.iterdir():
-            if p.suffix in ['.PDF','.pdf']:
-                file_paths.append(str(p.resolve()))
-        ingestion_status = "ingesting"
-    else:
-        #log status error
-        ingestion_status="completed"
-    
-    return state.update(
-        ingestion_status=ingestion_status, 
-        ingestion_filepaths=file_paths
-    )
+    return state
 
 @action(reads=["ingestion_filepaths"], writes=["valid_filepaths","invalid_filepaths"])
 def validation(state: State, db_connection:str) -> State:
@@ -985,76 +972,6 @@ class BatchIndexingResult(BaseModel):
 </file_11>
 
 <file_12>
-<path>ragnostic/ingestion/monitor.py</path>
-<content>
-```python
-"""Directory monitoring functionality for document ingestion."""
-from pathlib import Path
-from typing import List
-
-from .schema import MonitorResult, IngestionStatus, SupportedFileType
-
-
-def get_ingestible_files(directory: str | Path) -> MonitorResult:
-    """
-    Check directory for files that can be ingested.
-    
-    Args:
-        directory: Path to directory to monitor
-    
-    Returns:
-        MonitorResult containing status and any found files
-        
-    Example:
-        >>> result = get_ingestible_files("/path/to/docs")
-        >>> if result.has_files:
-        ...     print(f"Found {len(result.files)} files to ingest")
-    """
-    path = Path(directory)
-    
-    # Validate directory exists
-    if not path.exists():
-        return MonitorResult(
-            status=IngestionStatus.ERROR,
-            error_message=f"Directory does not exist: {directory}"
-        )
-    
-    # Validate it's actually a directory
-    if not path.is_dir():
-        return MonitorResult(
-            status=IngestionStatus.ERROR,
-            error_message=f"Path is not a directory: {directory}"
-        )
-    
-    # Get all files with supported extensions
-    supported_types = SupportedFileType.supported_types()
-    found_files: List[Path] = []
-    
-    try:
-        for file_path in path.iterdir():
-            if file_path.suffix in supported_types:
-                found_files.append(file_path.resolve())
-    except PermissionError:
-        return MonitorResult(
-            status=IngestionStatus.ERROR,
-            error_message=f"Permission denied accessing directory: {directory}"
-        )
-    except Exception as e:
-        return MonitorResult(
-            status=IngestionStatus.ERROR,
-            error_message=f"Error scanning directory: {str(e)}"
-        )
-    
-    # Return results
-    return MonitorResult(
-        status=IngestionStatus.MONITORING,
-        files=found_files
-    )
-```
-</content>
-</file_12>
-
-<file_13>
 <path>ragnostic/ingestion/monitor/__init__.py</path>
 <content>
 ```python
@@ -1070,9 +987,9 @@ __all__ = [
 
 ```
 </content>
-</file_13>
+</file_12>
 
-<file_14>
+<file_13>
 <path>ragnostic/ingestion/monitor/monitor.py</path>
 <content>
 ```python
@@ -1146,9 +1063,9 @@ class DirectoryMonitor:
         )
 ```
 </content>
-</file_14>
+</file_13>
 
-<file_15>
+<file_14>
 <path>ragnostic/ingestion/monitor/schema.py</path>
 <content>
 ```python
@@ -1179,9 +1096,9 @@ class MonitorResult(BaseModel):
 
 ```
 </content>
-</file_15>
+</file_14>
 
-<file_16>
+<file_15>
 <path>ragnostic/ingestion/processor/__init__.py</path>
 <content>
 ```python
@@ -1197,9 +1114,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_16>
+</file_15>
 
-<file_17>
+<file_16>
 <path>ragnostic/ingestion/processor/processor.py</path>
 <content>
 ```python
@@ -1208,7 +1125,7 @@ import logging
 from pathlib import Path
 from typing import List
 
-from ragnostic.utils import create_doc_id
+from ragnostic.ingestion.utils import create_doc_id
 from .schema import BatchProcessingResult, ProcessingResult, ProcessingStatus
 from .storage import store_document
 
@@ -1293,9 +1210,9 @@ class DocumentProcessor:
         return result
 ```
 </content>
-</file_17>
+</file_16>
 
-<file_18>
+<file_17>
 <path>ragnostic/ingestion/processor/schema.py</path>
 <content>
 ```python
@@ -1350,9 +1267,9 @@ class BatchProcessingResult(BaseModel):
         return len(self.failed_docs)
 ```
 </content>
-</file_18>
+</file_17>
 
-<file_19>
+<file_18>
 <path>ragnostic/ingestion/processor/storage.py</path>
 <content>
 ```python
@@ -1411,10 +1328,6 @@ def store_document(
         # Copy file preserving metadata
         copy2(source_path, dest_path)
         
-        return result.model_copy(update={
-            "storage_path": dest_path
-        })
-        
     except PermissionError as e:
         return result.model_copy(update={
             "status": ProcessingStatus.STORAGE_ERROR,
@@ -1433,67 +1346,61 @@ def store_document(
             "error_message": str(e),
             "error_code": "UNKNOWN"
         })
+    
+    # Success
+    return result.model_copy(update={
+        "storage_path": dest_path
+    })
+```
+</content>
+</file_18>
+
+<file_19>
+<path>ragnostic/ingestion/utils.py</path>
+<content>
+```python
+"""
+Basic utilities for document ingestion.
+"""
+import string
+
+from nanoid import generate
+
+DEFAULT_ALPHABET = string.ascii_lowercase + string.digits  # 0-9a-z
+
+def create_doc_id(prefix: str = "DOC", size: int = 12, alphabet: str = DEFAULT_ALPHABET) -> str:
+    """
+    Create a new document ID with optional prefix.
+    
+    Args:
+        prefix: String prefix for the ID (default: "DOC")
+        size: Length of the random portion (default: 12)
+        alphabet: String of characters to use for ID generation (default: numbers and lowercase letters)
+    
+    Returns:
+        Document ID string in format {prefix}_{random string}
+    
+    Example:
+        >>> create_doc_id("PDF")
+        'PDF_x1y2z3a4b5c6'
+    """
+    random_id = generate(alphabet=alphabet, size=size)
+    return f"{prefix}_{random_id}"
+
 ```
 </content>
 </file_19>
 
 <file_20>
-<path>ragnostic/ingestion/schema.py</path>
-<content>
-```python
-"""Pydantic models for the ingestion pipeline."""
-from enum import Enum
-from pathlib import Path
-from typing import List
-from pydantic import BaseModel, Field, ConfigDict
-
-
-class IngestionStatus(str, Enum):
-    """Status of the ingestion process."""
-    PENDING = "pending"
-    MONITORING = "monitoring"
-    INGESTING = "ingesting"
-    COMPLETED = "completed"
-    ERROR = "error"
-
-
-class MonitorResult(BaseModel):
-    """Result of monitoring a directory for files to ingest."""
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    
-    status: IngestionStatus
-    files: List[Path] = Field(default_factory=list)
-    error_message: str | None = None
-
-    @property
-    def has_files(self) -> bool:
-        """Check if any files were found."""
-        return len(self.files) > 0
-
-
-class SupportedFileType(str, Enum):
-    """Supported file types for ingestion."""
-    PDF = ".pdf"
-    PDF_CAPS = ".PDF"  # Some systems might use uppercase extension
-    
-    @classmethod
-    def supported_types(cls) -> set[str]:
-        """Get set of all supported file types."""
-        return {member.value for member in cls}
-```
-</content>
-</file_20>
-
-<file_21>
 <path>ragnostic/ingestion/validation/__init__.py</path>
 <content>
 ```python
 
 ```
 </content>
-</file_21>
+</file_20>
 
-<file_22>
+<file_21>
 <path>ragnostic/ingestion/validation/checks.py</path>
 <content>
 ```python
@@ -1601,9 +1508,9 @@ def check_hash_unique(filepath: Path, file_hash: str, db_client: DatabaseClient)
 
 ```
 </content>
-</file_22>
+</file_21>
 
-<file_23>
+<file_22>
 <path>ragnostic/ingestion/validation/schema.py</path>
 <content>
 ```python
@@ -1652,9 +1559,9 @@ class BatchValidationResult(BaseModel):
         return len(self.invalid_files) > 0
 ```
 </content>
-</file_23>
+</file_22>
 
-<file_24>
+<file_23>
 <path>ragnostic/ingestion/validation/validator.py</path>
 <content>
 ```python
@@ -1770,162 +1677,4 @@ class DocumentValidator:
         return results
 ```
 </content>
-</file_24>
-
-<file_25>
-<path>ragnostic/utils.py</path>
-<content>
-```python
-"""
-Basic utilities for document ID generation and file operations.
-"""
-from dataclasses import dataclass
-import string
-from pathlib import Path
-from shutil import copy2
-from typing import Optional
-
-from nanoid import generate
-
-DEFAULT_ALPHABET = string.ascii_lowercase + string.digits  # 0-9a-z
-
-@dataclass
-class FileOperationResult:
-    """
-    Result of a file operation containing success status and relevant details.
-    
-    Attributes:
-        success: Whether the operation succeeded
-        filepath: Path to the resulting file if successful
-        error: Exception object if an error occurred
-        error_code: String code indicating the type of error
-    """
-    success: bool
-    filepath: Optional[Path] = None
-    error: Optional[Exception] = None
-    error_code: Optional[str] = None
-
-
-def create_doc_id(prefix: str = "DOC", size: int = 12, alphabet: str = DEFAULT_ALPHABET) -> str:
-    """
-    Create a new document ID with optional prefix.
-    
-    Args:
-        prefix: String prefix for the ID (default: "DOC")
-        size: Length of the random portion (default: 12)
-        alphabet: String of characters to use for ID generation (default: numbers and lowercase letters)
-    
-    Returns:
-        Document ID string in format {prefix}_{random string}
-    
-    Example:
-        >>> create_doc_id("PDF")
-        'PDF_x1y2z3a4b5c6'
-    """
-    random_id = generate(alphabet=alphabet, size=size)
-    return f"{prefix}_{random_id}"
-
-def copy_file(src_path: str | Path, dest_dir: str | Path) -> FileOperationResult:
-    """
-    Copy a file to destination directory.
-    
-    Args:
-        src_path: Source file path
-        dest_dir: Destination directory
-        
-    Returns:
-        FileOperationResult containing success status and details
-        
-    Example:
-        >>> result = copy_file('documents/test.pdf', 'archive/')
-        >>> if result.success:
-        ...     print(f"File copied to {result.filepath}")
-        ... else:
-        ...     print(f"Copy failed: {result.error_code}")
-    """
-    src_path = Path(src_path)
-    dest_dir = Path(dest_dir)
-    
-    # Check source file
-    if not src_path.is_file():
-        return FileOperationResult(
-            success=False,
-            error=FileNotFoundError(f"Source file not found: {src_path}"),
-            error_code="SOURCE_NOT_FOUND"
-        )
-    
-    # Check destination directory
-    if not dest_dir.is_dir():
-        return FileOperationResult(
-            success=False,
-            error=NotADirectoryError(f"Destination is not a directory: {dest_dir}"),
-            error_code="INVALID_DESTINATION"
-        )
-        
-    try:
-        # Copy file preserving metadata
-        new_path = dest_dir / src_path.name
-        copy2(src_path, new_path)
-        return FileOperationResult(success=True, filepath=new_path)
-        
-    except PermissionError as e:
-        return FileOperationResult(
-            success=False,
-            error=e,
-            error_code="PERMISSION_DENIED"
-        )
-    except OSError as e:
-        return FileOperationResult(
-            success=False,
-            error=e,
-            error_code="COPY_FAILED"
-        )
-
-def rename_file(file_path: str | Path, new_name: str) -> FileOperationResult:
-    """
-    Rename a file in its current directory.
-    
-    Args:
-        file_path: Path to file to rename
-        new_name: New filename (not path)
-        
-    Returns:
-        FileOperationResult containing success status and details
-        
-    Example:
-        >>> result = rename_file('archive/old.pdf', 'new.pdf')
-        >>> if result.success:
-        ...     print(f"File renamed to {result.filepath}")
-        ... else:
-        ...     print(f"Rename failed: {result.error_code}")
-    """
-    file_path = Path(file_path)
-    
-    # Check source file
-    if not file_path.is_file():
-        return FileOperationResult(
-            success=False,
-            error=FileNotFoundError(f"File not found: {file_path}"),
-            error_code="FILE_NOT_FOUND"
-        )
-        
-    try:
-        new_path = file_path.parent / new_name
-        file_path.rename(new_path)
-        return FileOperationResult(success=True, filepath=new_path)
-        
-    except PermissionError as e:
-        return FileOperationResult(
-            success=False,
-            error=e,
-            error_code="PERMISSION_DENIED"
-        )
-    except OSError as e:
-        return FileOperationResult(
-            success=False,
-            error=e,
-            error_code="RENAME_FAILED"
-        )
-```
-</content>
-</file_25>
+</file_23>

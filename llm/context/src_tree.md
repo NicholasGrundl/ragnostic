@@ -27,8 +27,6 @@ src
     │   │   ├── schema.py
     │   │   └── validator.py
     │   ├── __init__.py
-    │   ├── monitor.py
-    │   └── schema.py
+    │   └── utils.py
     ├── __init__.py
-    ├── dag_ingestion.py
-    └── utils.py
+    └── dag_ingestion.py
