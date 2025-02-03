@@ -6,6 +6,11 @@
 # Virtual environments
 .venv
 
+# Ignore personal/local test files and folders
+# - use these for storing local data, figures, program exports, .etc
++*
++*/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -17,3 +22,7 @@ build/
 dist/
 wheels/
 *.egg-info
+
+#IPython
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*

@@ -1,0 +1,44 @@
+# General
+python-magic
+
+#Pytorch
+torch
+torchvision
+torchaudio
+
+#PDF Parsing
+docling
+marker-pdf
+pymupdf4llm
+
+#Internet Search
+brave-search
+wikipedia
+wikipedia-api
+
+#Database/Storage
+sqlalchemy
+pydantic
+chromadb
+nanoid
+
+#ML/Data
+numpy
+pandas
+scikit-learn
+
+# Embeddings/LLMs
+tiktoken
+sentence-transformers
+openai
+cohere
+anthropic
+instructor
+
+# Orchestration
+burr[start]
+sf-hamilton[visualization]
+
+#Image manipulation
+Pillow
+
