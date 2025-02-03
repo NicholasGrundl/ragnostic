@@ -523,11 +523,51 @@ The system is responsible for:
 
 ```mermaid
 flowchart LR
-    A[Document Monitor] --> B[Duplicate Check]
-    B --> C[Raw Storage]
-    C --> D[Document Library DB]
-    D --> E[Basic Processing]
-```
+    subgraph Monitor[Document Monitor]
+        direction TB
+        F[File Watcher] --> V[Basic Validation]
+    end
+    
+    subgraph Validate[Document Validation]
+        direction TB
+        H[Hash Check] --> M[Mime Check]
+        M --> S[Size Check]
+    end
+    
+    subgraph Raw[Raw Processing]
+        direction TB
+        ID[Doc ID Service] --> RS[Raw Storage]
+    end
+    
+    subgraph Index[Document Indexing]
+        direction TB
+        DB[Document DB] --> MC[Metadata Client]
+        MC --> BC[Basic Content]
+    end
+    
+    subgraph Status[Status Tracking]
+        direction TB
+        S1[Ingested] --> S2[Queued]
+    end
+    
+    Monitor --> Validate
+    Validate --> Raw
+    Raw --> Index
+    Index <--> Status
+
+    %% Styling
+    classDef monitor fill:#e1f5fe,stroke:#333,color:#000
+    classDef validate fill:#fff3e0,stroke:#333,color:#000
+    classDef raw fill:#f3e5f5,stroke:#333,color:#000
+    classDef index fill:#e8f5e9,stroke:#333,color:#000
+    classDef status fill:#fce4ec,stroke:#333,color:#000
+    
+    class F,V monitor
+    class H,M,S validate
+    class ID,RS raw
+    class DB,MC,BC index
+    class S1,S2 status
+```    
 
 ## 1. Document Monitor
 ### 1.1 File Monitor Service
@@ -536,26 +576,29 @@ flowchart LR
 - Basic validation:
   * File exists and is readable
   * Valid PDF format
-  * File size check
 
-### 1.2 Duplicate Detection
+## 2. Document Validation
+### 2.1 Duplicate Checks
 - Calculate file hash (SHA-256)
 - Check against existing document hashes in database
 - Skip ingestion if duplicate found
 
+### 2.2 Validation Checks
+- mime type
+- file size limits
+- not corrupted
 
 
 
-## 2. Raw Storage System
-### 2.1 Document id service
+## 3. Raw Processing
+### 3.1 Document id service
 Issues new document ids for valid documents
 - Move file to raw storage with new doc_id-based filename
 - Basic file system operations only
 - No complex processing at this stage
 - updates document database
 
-### 2.2 File Organization
-
+### 3.2 File Organization
 Raw document blobs are stored in a flat filesystem
 - will initially store locally
 - easy switch to S3 like storage (i.e. cloud)
@@ -565,13 +608,13 @@ Raw document blobs are stored in a flat filesystem
 └── {doc_id}.pdf
 ```
 
-
-## 3. Document Database
+## 4. Document Indexing
 
 ### 3.1 Document Database Core Schema
-For the ingestion process and raw file storage we maintain the mapping from rawa file to database entry
+For the indexing process and raw file storage we maintain the mapping from raw file to database entry
 -  metadata allows for search and retrieval
 
+**Document Core Schema**
 ```sql
 ------------------------------------------------------------------
 -- Core Document Management
@@ -600,6 +643,39 @@ CREATE TABLE document_metadata (
 );
 ```
 
+**Document ER Diagram**
+```mermaid
+erDiagram
+    Document ||--|| DocumentMetadata : has
+    Document ||--|| ProcessingStatus : tracks
+
+    Document {
+        string id PK
+        string raw_file_path
+        string file_hash
+        integer file_size_bytes
+        string mime_type
+        datetime ingestion_date
+    }
+
+    DocumentMetadata {
+        string doc_id PK, FK
+        string title
+        json authors
+        string description
+        datetime creation_date
+        integer page_count
+        string language
+    }
+
+    ProcessingStatus {
+        string doc_id PK, FK
+        string status
+        string error_message
+        datetime last_updated
+    }
+```
+
 ### 3.2 Document database python client
 - client for accessing database in python
 - document CRUD
@@ -607,14 +683,239 @@ CREATE TABLE document_metadata (
 - faceted filter on date ingested, etc.
 
 
+### 3.3 Basic Document processing
 
-## 4. Basic Processing
+Initial document extaraction is handled by the `pymupdf4llm` package. It pulls easily available raw text and metadata WIHTOUT complex dependencies. The primary role is:
+- Store the raw document for processing
+- Create initial document metadata entry
+- Initial content for basic or fuzzy search (keyword/queries)
+- Utilize minimal LLM or heavy pytorch code (can install as a small subset of package and use in many systems)
+- Is fast and failure proof
 
-### 4.1 Document database Proicessing schema
+
+
+## Error Handling
+### Ingestion Error Types
+1. File System Errors:
+   - File not found
+   - Permission denied
+   - Storage full
+   - Invalid file permissions
+
+2. Validation Errors:
+   - Invalid file format
+   - File too large
+   - Duplicate document
+   - Corrupted file
+
+3. Database Errors:
+   - Metadata insertion failure
+   - Status tracking failure
+   - Document record creation failure
+
+Note: Document processing and extraction errors are handled by the Document Extraction system (see Document_Extraction.md)
+
+
+```
+</content>
+</file_5>
+
+<file_6>
+<path>2b_Document_Extraction.md</path>
+<content>
+```markdown
+# Document Extraction Technical Specification
+
+## Overview
+
+### Purpose
+This document specifies the document processing/extraction system implementation, which transforms raw documents (PDFs and web content) into extracted content with features (text, images, tables) and their associated metadata within the RAGnostic architecture.
+
+### Scope
+The system is responsible for:
+- Extracting clean text content from documents
+- Identifying and extracting document structure (sections, headers)
+- Extracting and processing images and tables
+- Generating captions for media content
+- Storing processed content in structured database format
+- Maintaining relationships between document elements
+
+### System Context
+- Input: Raw PDF documents and web content from Document Ingestion pipeline
+- Output: Structured document content in SQLite database
+- Dependencies: Document Ingestion system
+
+## System Architecture
+
+```mermaid
+flowchart LR
+    %% Input nodes
+    pdf[PDF Files]
+    web[Web Content]
+
+    %% PDF Processing Flow
+    subgraph pdf_flow[PDF Processing]
+        direction TB
+        doc_ext[Document Extraction]
+        
+        subgraph pdf_proc[Content Extraction]
+            direction TB
+            text_ext[Text Extraction]
+            img_ext[Image Extraction] 
+            tbl_ext[Table Extraction]
+        end
+        
+        subgraph pdf_feature[Feature Processing]
+            direction TB
+            img_cap[Image Captioning]
+            tbl_cap[Table Captioning]
+            txt_clean[Text Cleaning]
+        end
+    end
+
+    %% Web Processing Flow    
+    subgraph web_flow[Web Processing]
+        direction TB
+        web_ext[Content Extraction]
+        
+        subgraph web_proc[Content Parsing]
+            direction TB
+            html_text[HTML Text]
+            html_img[Images]
+            html_tbl[Tables]
+        end
+        
+        subgraph web_feature[Feature Processing]
+            direction TB
+            web_img_cap[Image Description]
+            web_tbl_cap[Table Description]
+            web_clean[Text Formatting]
+        end
+    end
+
+    %% Storage
+    subgraph store[Document Database]
+        direction TB
+        doc_sections[(Document Sections)]
+        doc_images[(Document Images)]
+        doc_tables[(Document Tables)]
+    end
+
+    %% PDF Flow Connections
+    pdf --> doc_ext
+    doc_ext --> text_ext & img_ext & tbl_ext
+    text_ext --> txt_clean
+    img_ext --> img_cap
+    tbl_ext --> tbl_cap
+
+    %% Web Flow Connections
+    web --> web_ext
+    web_ext --> html_text & html_img & html_tbl
+    html_text --> web_clean
+    html_img --> web_img_cap
+    html_tbl --> web_tbl_cap
+
+    %% Storage Connections
+    txt_clean & web_clean --> doc_sections
+    img_cap & web_img_cap --> doc_images
+    tbl_cap & web_tbl_cap --> doc_tables
+
+    classDef input fill:#e1f5fe,stroke:#333,color:#000
+    classDef process fill:#f3e5f5,stroke:#333,color:#000
+    classDef feature fill:#fff3e0,stroke:#333,color:#000
+    classDef storage fill:#dcedc8,stroke:#333,color:#000
+    
+    class pdf,web input
+    class doc_ext,web_ext,text_ext,img_ext,tbl_ext,html_text,html_img,html_tbl process
+    class img_cap,tbl_cap,txt_clean,web_img_cap,web_tbl_cap,web_clean feature
+    class doc_sections,doc_images,doc_tables storage
+```
+
+## 1. PDF Processing Pipeline
+### 1.1 Document Extraction
+- Input: Raw PDF file
+- Primary tools: `docling` and `marker-pdf`
+- Process:
+  * Load PDF document
+  * Extract document structure
+  * Identify sections and headers
+  * Track page numbers and positions
+- Output: Initial document structure with section markers
+
+### 1.2 Content Extraction
+- Text Extraction:
+  * Clean text content
+  * Header identification
+  * Section boundary detection
+  * Page tracking
+- Image Extraction:
+  * Image location identification
+  * Image data extraction
+  * Format standardization
+  * Reference tracking
+- Table Extraction:
+  * Table boundary detection
+  * Structure preservation
+  * Cell content extraction
+  * Position tracking
+
+### 1.3 Feature Processing
+- Text Cleaning:
+  * Format standardization
+  * Special character handling
+  * Section relationship mapping
+  * Content validation
+- Image Captioning:
+  * Context assembly
+  * Caption generation
+  * Quality validation
+- Table Captioning:
+  * Structure analysis
+  * Content summarization
+  * Context integration
+
+## 2. Web Content Pipeline
+### 2.1 Content Extraction
+- Input: Web article URL or content
+- Primary tools: `wikipedia` and `wikipedia-api`
+- Process:
+  * Content retrieval
+  * Structure parsing
+  * Media reference extraction
+
+### 2.2 Content Parsing
+- HTML Text:
+  * Clean text extraction
+  * Structure preservation
+  * Link handling
+- Image Processing:
+  * Reference extraction
+  * Metadata collection
+  * Source tracking
+- Table Processing:
+  * Structure extraction
+  * Format preservation
+  * Cell content parsing
+
+### 2.3 Feature Processing
+- Text Formatting:
+  * Style normalization
+  * Section organization
+  * Reference tracking
+- Image Description:
+  * Context integration
+  * Description generation
+  * Reference mapping
+- Table Description:
+  * Structure analysis
+  * Content summarization
+  * Context integration
+
+## 3. Storage System
+### 3.1 Database Schema
+
+**Datamodel Schema**
 ```sql
-------------------------------------------------------------------
--- Document Content & Structure
-------------------------------------------------------------------
 -- Document's physical section structure
 CREATE TABLE document_sections (
     section_id TEXT PRIMARY KEY,
@@ -656,54 +957,109 @@ CREATE TABLE document_tables (
 );
 ```
 
-### 4.2 PDF Processing
-- extract into pydantic using `docling` and `marker-pdf`
-- specify a explicit placeholder for images and tables in text
-- if palceholder not piossible use REGEX and add one
-- updates `document_sections` SQL table entry
+**ER Diagram**
+```mermaid
+erDiagram
+    Document ||--o{ DocumentSection : contains
+    DocumentSection ||--o{ DocumentSection : "parent of"
+    DocumentSection ||--o{ DocumentImage : contains
+    DocumentSection ||--o{ DocumentTable : contains
 
-### 4.3 Wikipedia processing
-- extract text from website or url using `wikipedia` and `wikipedia-api`
-- specify place holder for images
-- updates `document_sections` SQL table entry
+    Document {
+        string id PK
+    }
 
-### 4.4. Image and table processing
-- for each doc_id stores images and tables in database
-- updates the `document_images` and `document_tables` in database
+    DocumentSection {
+        string section_id PK
+        string doc_id FK
+        string parent_section_id FK
+        integer level
+        string title
+        text content
+        integer sequence_order
+        integer page_start
+        integer page_end
+    }
+
+    DocumentImage {
+        integer id PK
+        string doc_id FK
+        string section_id FK
+        text image_data
+        string caption
+        string embedding_id
+        integer page_number
+    }
+
+    DocumentTable {
+        integer id PK
+        string doc_id FK
+        string section_id FK
+        string caption
+        json table_data
+        integer page_number
+    }
+```
+  
+### 3.2 Storage Operations
+- Section Storage:
+  * Hierarchical relationship maintenance
+  * Order preservation
+  * Content integrity checks
+- Image Storage:
+  * Binary data handling
+  * Caption association
+  * Section mapping
+- Table Storage:
+  * Structure preservation
+  * JSON serialization
+  * Context tracking
+
+## 4. Error Handling
+### 4.1 Processing Errors
+- Document parsing failures
+- Image extraction errors
+- Table structure issues
+- Caption generation failures
+
+### 4.2 Storage Errors
+- Database constraints
+- Data integrity issues
+- Relationship violations
+
+### 4.3 Recovery Strategy
+- Partial content preservation
+- Error logging
+- Processing continuation
+- Cleanup procedures
+
+## 5. Monitoring and Metrics
+### 5.1 Processing Metrics
+- Document processing time
+- Feature extraction success rates
+- Caption generation quality
+- Error rates by type
+
+### 5.2 Storage Metrics
+- Database size
+- Query performance
+- Relationship integrity
+- Storage efficiency
+
+## 6. Future Considerations
+- Additional document format support
+- Enhanced caption generation
+- Improved table structure detection
+- Advanced error recovery
+- Performance optimization
+- Cloud storage integration
 
 
-# WORKING ------------------------
-
-
-## Error Handling
-### Basic Error Types
-1. File System Errors:
-   - File not found
-   - Permission denied
-   - Storage full
-
-2. Processing Errors:
-   - Invalid file format
-   - Extraction failure
-
-### Error Response
-- Log error details
-- Skip problematic documents
-- Continue processing others
-
-
-## Monitoring and Metrics
-### Basic Metrics
-- Number of documents ingested
-- Storage usage
-- Basic error counts
-- Processing success/failure rates
-
-### Implementation
-[Placeholder, needs work...]
 
 
 
+
+# ----- WORKING -----
 ## Document Database Diagram
 
 ```mermaid
@@ -776,10 +1132,10 @@ erDiagram
 ```    
 ```
 </content>
-</file_5>
+</file_6>
 
-<file_6>
-<path>2b_Semantic_Extraction.md</path>
+<file_7>
+<path>2c_Document_Semantics.md</path>
 <content>
 ```markdown
 # Semantic Extraction Technical Specification
@@ -1240,4 +1596,4 @@ classDiagram
 - parse the logs at a later date for stats
 ```
 </content>
-</file_6>
+</file_7>
