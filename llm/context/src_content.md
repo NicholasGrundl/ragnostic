@@ -774,7 +774,7 @@ class PDFExtractor:
 """Document indexing functionality."""
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from ragnostic.db.client import DatabaseClient
 from ragnostic.db.schema import Document, DocumentCreate, DocumentMetadata, DocumentMetadataCreate
@@ -790,9 +790,10 @@ logger = logging.getLogger(__name__)
 class DocumentIndexer:
     """Handles document indexing operations."""
     
+    SUPPORTED_MIME_TYPES: Set[str] = {'application/pdf', 'application/x-pdf'}
+
     def __init__(self, 
                  db_client: DatabaseClient,
-                 extract_text: bool = True,
                  text_preview_chars: int = 1000):
         """Initialize document indexer.
         
@@ -803,7 +804,6 @@ class DocumentIndexer:
         """
         self.db_client = db_client
         self.extractor = PDFExtractor(
-            extract_text=extract_text,
             text_preview_chars=text_preview_chars
         )
     
@@ -817,6 +817,16 @@ class DocumentIndexer:
             IndexingResult with status and details
         """
         try:
+            # Validate mime type first
+            mime_type = magic.from_file(str(filepath), mime=True)
+            if mime_type not in self.SUPPORTED_MIME_TYPES:
+                return IndexingResult(
+                    doc_id=filepath.stem,
+                    filepath=filepath,
+                    status=IndexingStatus.METADATA_ERROR,
+                    error_message=f"Unsupported file type: {mime_type}"
+                )
+            
             # Get certain metadata
             file_hash = compute_file_hash(filepath)
             if not file_hash:
@@ -827,7 +837,6 @@ class DocumentIndexer:
                     error_message="Failed to compute file hash"
                 )
             
-            mime_type = magic.from_file(str(filepath), mime=True)
             file_size = filepath.stat().st_size
             
             # Create document record
@@ -1046,6 +1055,133 @@ def get_ingestible_files(directory: str | Path) -> MonitorResult:
 </file_12>
 
 <file_13>
+<path>ragnostic/ingestion/monitor/__init__.py</path>
+<content>
+```python
+"""Directory monitoring functionality for document ingestion."""
+from .monitor import DirectoryMonitor
+from .schema import MonitorResult, MonitorStatus
+
+__all__ = [
+    "DirectoryMonitor",
+    "MonitorResult",
+    "MonitorStatus",
+]
+
+```
+</content>
+</file_13>
+
+<file_14>
+<path>ragnostic/ingestion/monitor/monitor.py</path>
+<content>
+```python
+
+
+"""Directory monitoring implementation."""
+from pathlib import Path
+from typing import List, Set
+
+from .schema import MonitorResult, MonitorStatus
+
+class DirectoryMonitor:
+    """Monitors directory for files to ingest."""
+    
+    def __init__(self, supported_extensions: Set[str] | None = None):
+        """Initialize directory monitor.
+        
+        Args:
+            supported_extensions: Set of supported file extensions (e.g., {'.pdf', '.PDF'})
+                                If None, defaults to {'.pdf', '.PDF'}
+        """
+        self.supported_extensions = supported_extensions or {'.pdf', '.PDF'}
+    
+    def get_ingestible_files(self, directory: str | Path) -> MonitorResult:
+        """Check directory for files that can be ingested.
+        
+        Args:
+            directory: Path to directory to monitor
+        
+        Returns:
+            MonitorResult containing status and any found files
+        """
+        path = Path(directory)
+        
+        # Validate directory exists
+        if not path.exists():
+            return MonitorResult(
+                status=MonitorStatus.ERROR,
+                error_message=f"Directory does not exist: {directory}"
+            )
+        
+        # Validate it's actually a directory
+        if not path.is_dir():
+            return MonitorResult(
+                status=MonitorStatus.ERROR,
+                error_message=f"Path is not a directory: {directory}"
+            )
+        
+        # Get all files with supported extensions
+        found_files: List[Path] = []
+        
+        try:
+            for file_path in path.iterdir():
+                if file_path.suffix in self.supported_extensions:
+                    found_files.append(file_path.resolve())
+        except PermissionError:
+            return MonitorResult(
+                status=MonitorStatus.ERROR,
+                error_message=f"Permission denied accessing directory: {directory}"
+            )
+        except Exception as e:
+            return MonitorResult(
+                status=MonitorStatus.ERROR,
+                error_message=f"Error scanning directory: {str(e)}"
+            )
+        
+        # Return results
+        return MonitorResult(
+            status=MonitorStatus.MONITORING,
+            files=found_files
+        )
+```
+</content>
+</file_14>
+
+<file_15>
+<path>ragnostic/ingestion/monitor/schema.py</path>
+<content>
+```python
+# ragnostic/ingestion/monitor/schema.py
+"""Schema definitions for directory monitoring."""
+from enum import Enum
+from pathlib import Path
+from typing import List
+from pydantic import BaseModel, Field, ConfigDict
+
+class MonitorStatus(str, Enum):
+    """Status of directory monitoring."""
+    MONITORING = "monitoring"
+    ERROR = "error"
+
+class MonitorResult(BaseModel):
+    """Result of monitoring a directory for files to ingest."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
+    status: MonitorStatus
+    files: List[Path] = Field(default_factory=list)
+    error_message: str | None = None
+
+    @property
+    def has_files(self) -> bool:
+        """Check if any files were found."""
+        return len(self.files) > 0
+
+```
+</content>
+</file_15>
+
+<file_16>
 <path>ragnostic/ingestion/processor/__init__.py</path>
 <content>
 ```python
@@ -1061,9 +1197,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_13>
+</file_16>
 
-<file_14>
+<file_17>
 <path>ragnostic/ingestion/processor/processor.py</path>
 <content>
 ```python
@@ -1157,9 +1293,9 @@ class DocumentProcessor:
         return result
 ```
 </content>
-</file_14>
+</file_17>
 
-<file_15>
+<file_18>
 <path>ragnostic/ingestion/processor/schema.py</path>
 <content>
 ```python
@@ -1214,9 +1350,9 @@ class BatchProcessingResult(BaseModel):
         return len(self.failed_docs)
 ```
 </content>
-</file_15>
+</file_18>
 
-<file_16>
+<file_19>
 <path>ragnostic/ingestion/processor/storage.py</path>
 <content>
 ```python
@@ -1299,9 +1435,9 @@ def store_document(
         })
 ```
 </content>
-</file_16>
+</file_19>
 
-<file_17>
+<file_20>
 <path>ragnostic/ingestion/schema.py</path>
 <content>
 ```python
@@ -1346,18 +1482,18 @@ class SupportedFileType(str, Enum):
         return {member.value for member in cls}
 ```
 </content>
-</file_17>
+</file_20>
 
-<file_18>
+<file_21>
 <path>ragnostic/ingestion/validation/__init__.py</path>
 <content>
 ```python
 
 ```
 </content>
-</file_18>
+</file_21>
 
-<file_19>
+<file_22>
 <path>ragnostic/ingestion/validation/checks.py</path>
 <content>
 ```python
@@ -1465,9 +1601,9 @@ def check_hash_unique(filepath: Path, file_hash: str, db_client: DatabaseClient)
 
 ```
 </content>
-</file_19>
+</file_22>
 
-<file_20>
+<file_23>
 <path>ragnostic/ingestion/validation/schema.py</path>
 <content>
 ```python
@@ -1516,9 +1652,9 @@ class BatchValidationResult(BaseModel):
         return len(self.invalid_files) > 0
 ```
 </content>
-</file_20>
+</file_23>
 
-<file_21>
+<file_24>
 <path>ragnostic/ingestion/validation/validator.py</path>
 <content>
 ```python
@@ -1634,9 +1770,9 @@ class DocumentValidator:
         return results
 ```
 </content>
-</file_21>
+</file_24>
 
-<file_22>
+<file_25>
 <path>ragnostic/utils.py</path>
 <content>
 ```python
@@ -1792,4 +1928,4 @@ def rename_file(file_path: str | Path, new_name: str) -> FileOperationResult:
         )
 ```
 </content>
-</file_22>
+</file_25>

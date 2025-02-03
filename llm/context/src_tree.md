@@ -12,6 +12,10 @@ src
     │   │   ├── extraction.py
     │   │   ├── indexer.py
     │   │   └── schema.py
+    │   ├── monitor
+    │   │   ├── __init__.py
+    │   │   ├── monitor.py
+    │   │   └── schema.py
     │   ├── processor
     │   │   ├── __init__.py
     │   │   ├── processor.py

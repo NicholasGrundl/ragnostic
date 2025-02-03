@@ -18,16 +18,16 @@ jupyter:
 #### LLM Context ####
 FILETREE_SCRIPT=./llm/file_tree.py
 FILETREE_SRC=./llm/context/src_tree.md
-FILETREE_REPO=./llm/context/repo_tree.md
+FILETREE_DOCS=./llm/context/docs_tree.md
 FILETREE_UNITTEST=./llm/context/unittest_tree.md
 
 CONTENT_SCRIPT=./llm/file_tree_to_markdown.py
 CONTENT_SRC=./llm/context/src_content.md
-CONTENT_REPO=./llm/context/repo_content.md
+CONTENT_DOCS=./llm/context/docs_content.md
 CONTENT_UNITTEST=./llm/context/unittest_content.md
 
 .PHONY: context
-context: context.src context.unittest context.repo
+context: context.src context.unittest context.docs
 
 # --- SRC directory
 .PHONY: context.src
@@ -47,23 +47,23 @@ filetree.src:
 content.src:
 	@python $(CONTENT_SCRIPT) $(FILETREE_SRC) -o $(CONTENT_SRC)
 
-# --- REPO directory
-.PHONY: context.repo
-context.repo:filetree.repo content.repo
+# --- DOCS directory
+.PHONY: context.docs
+context.docs:filetree.docs content.docs
 
-.PHONY: filetree.repo
-filetree.repo:
+.PHONY: filetree.docs
+filetree.docs:
 	@python $(FILETREE_SCRIPT) \
-		--directory . \
+		--directory ./docs \
 		--level 10 \
 		--exclude-suffixes .pyc .pyo .pyd \
 		--exclude-filenames __pycache__ .git .pytest_cache .env .venv node_modules .ipynb_checkpoints data\
 		--include-base-path \
-		-o $(FILETREE_REPO)
+		-o $(FILETREE_DOCS)
 
-.PHONY: content.repo
-content.repo:
-	@python $(CONTENT_SCRIPT) $(FILETREE_REPO) -o $(CONTENT_REPO)
+.PHONY: content.docs
+content.docs:
+	@python $(CONTENT_SCRIPT) $(FILETREE_DOCS) -o $(CONTENT_DOCS)
 
 # --- UNITTEST directory
 .PHONY: context.unittest
