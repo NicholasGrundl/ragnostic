@@ -1,5 +1,8 @@
 # Action Items
 
+- change libmagic (python-magic) dependency which is OS level and varied by OS
+- consider filetype library stdlib or extensions
+
 ## Ingestion flow
 
 Completed the basic ingestion flow and it runs in jupyter.  Whats missing is the following:

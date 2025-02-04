@@ -1,5 +1,6 @@
 # General
 python-magic
+structlog
 
 #Pytorch
 torch
@@ -8,7 +9,7 @@ torchaudio
 
 #PDF Parsing
 docling
-marker-pdf
+# marker-pdf
 pymupdf4llm
 
 #Internet Search
