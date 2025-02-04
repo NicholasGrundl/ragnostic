@@ -820,6 +820,780 @@ Note: Document processing and extraction errors are handled by the Document Extr
 </file_5>
 
 <file_6>
+<path>2b.1_DocumentExtraction_ContentExtraction_Design.md</path>
+<content>
+```markdown
+# Document Extraction System Design
+
+## Overview
+
+The document extraction system processes PDFs to extract text, images, and structural information. It uses a pluggable architecture to support multiple extraction backends while focusing initially on docling.
+
+### Document Extraction Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Manager as ExtractionManager
+    participant Extractor as DoclingExtractor
+    participant DB as DatabaseClient
+    participant FS as FileSystem
+
+    Client->>Manager: process_document(doc_id)
+    Manager->>DB: get_document(doc_id)
+    Manager->>Extractor: extract_document(file_path)
+    Extractor-->>Manager: ExtractionResult
+    
+    Manager->>Manager: _store_sections(sections)
+    
+    loop For each image
+        Manager->>Manager: check_size(image)
+        alt image size <= limit
+            Manager->>DB: store_image_data(base64)
+        else image size > limit
+            Manager->>FS: save_image_file()
+            Manager->>DB: store_image_path()
+        end
+    end
+    
+    Manager-->>Client: ExtractionResult
+```
+
+### Implementation Notes
+
+1. **Error Handling**
+   - Each component includes detailed error messages
+   - Failures in one section don't stop entire process
+   - All errors logged and included in result
+
+2. **Image Storage Strategy**
+   - Images under size_limit stored as base64 in database
+   - Larger images saved to filesystem
+   - All metadata stored in database regardless of storage location
+
+3. **Section Confidence**
+   - Low default confidence for auto-detected sections
+   - Allows for manual verification or semantic processing
+   - Sections can be merged/split in semantic stage
+
+4. **Future Considerations**
+   - Easy to add new extractors
+   - Storage strategy can be modified
+   - Caption generation can be added
+   - Section detection can be enhanced
+
+## Core Components
+
+### 1. Base Interfaces
+
+#### 1.1 Extraction Results
+```python
+from typing import Protocol, List, Optional
+from datetime import datetime
+from pathlib import Path
+from pydantic import BaseModel
+
+class ExtractedImage(BaseModel):
+    """Represents an extracted image with metadata"""
+    image_data: bytes
+    format: str
+    size_bytes: int
+    page_number: int
+    bbox: tuple[float, float, float, float]  # x1, y1, x2, y2 coordinates
+    confidence: float = 1.0
+
+class ExtractedSection(BaseModel):
+    """Represents a detected document section"""
+    title: str
+    content: str
+    level: int
+    page_start: int
+    page_end: int
+    confidence: float = 0.0  # Default low confidence for sections
+
+class ExtractionResult(BaseModel):
+    """Contains all extracted content from a document"""
+    doc_id: str
+    sections: List[ExtractedSection]
+    images: List[ExtractedImage]
+    extraction_date: datetime
+    extractor_name: str
+    error_messages: List[str] = []
+```
+
+#### 1.2 Error Handling Models
+```python
+from enum import Enum
+from typing import List, Optional
+from pydantic import BaseModel
+
+class ExtractionErrorType(Enum):
+    PARSER_ERROR = "parser_error"
+    IMAGE_EXTRACTION_ERROR = "image_extraction"
+    SECTION_ERROR = "section_error"
+    STORAGE_ERROR = "storage_error"
+
+class ExtractionError(BaseModel):
+    error_type: ExtractionErrorType
+    message: str
+    section_id: Optional[str] = None
+    page_number: Optional[int] = None
+    recoverable: bool = True
+```
+
+
+### 2. Document Extraction Interface
+
+#### 2.1 Pluggable Extraction
+
+```python
+class DocumentExtractor(Protocol):
+    """Base protocol for document extractors"""
+    name: str
+    
+    def extract_document(self, file_path: Path) -> ExtractionResult:
+        """Extract content from document"""
+        ...
+```
+
+#### 2.2 Docling Implementation
+
+```python
+class DoclingExtractor:
+    """Docling-based document extractor"""
+    name: str = "docling"
+    
+    def extract_document(self, file_path: Path) -> ExtractionResult:
+        # Implementation will be added later when we have docling context
+        ...
+```
+
+### 3. Extraction Workflow
+
+#### 3.1 Extraction Manager
+
+Triggers and runs the extraction
+
+```python
+class ExtractionManager:
+    """Manages document extraction process"""
+    def __init__(self, 
+                 db_client: DatabaseClient,
+                 extractor: DocumentExtractor,
+                 image_size_limit: int = 1_000_000):  # 1MB default
+        self.db_client = db_client
+        self.extractor = extractor
+        self.image_size_limit = image_size_limit
+    
+    def process_document(self, doc_id: str) -> ExtractionResult:
+        """Process a single document"""
+        ...
+    
+    def _store_sections(self, doc_id: str, sections: List[ExtractedSection]) -> None:
+        """Store extracted sections in database"""
+        ...
+    
+    def _store_images(self, doc_id: str, images: List[ExtractedImage]) -> None:
+        """Store extracted images in database or filesystem"""
+        ...
+```
+#### 3.2 Extraction Progress Tracking
+
+Logger for the process
+
+```python
+from contextlib import contextmanager
+from time import time
+from typing import Iterator
+
+class ExtractionProgress:
+    def __init__(self, total_pages: int):
+        self.total_pages = total_pages
+        self.current_page = 0
+        self.start_time = time()
+        self.section_count = 0
+        self.image_count = 0
+        
+    @property
+    def progress(self) -> float:
+        return self.current_page / self.total_pages
+        
+    @property
+    def elapsed_time(self) -> float:
+        return time() - self.start_time
+
+    def update(self, page: int, sections: int = 0, images: int = 0):
+        self.current_page = page
+        self.section_count += sections
+        self.image_count += images
+        
+        # Log progress every 10% or every 5 minutes
+        if self.progress % 0.1 < 0.01 or self.elapsed_time % 300 < 1:
+            logging.info(
+                f"Progress: {self.progress:.1%} | "
+                f"Page {self.current_page}/{self.total_pages} | "
+                f"Found {self.section_count} sections, {self.image_count} images | "
+                f"Time: {self.elapsed_time:.1f}s"
+            )
+
+@contextmanager
+def track_extraction(doc_id: str, total_pages=100) -> Iterator[ExtractionProgress]:
+    tracker = ExtractionProgress(total_pages=total_pages)  # Get from doc metadata
+    try:
+        yield tracker
+    finally:
+        logging.info(f"Extraction complete for {doc_id}")
+        logging.info(f"Total time: {tracker.elapsed_time:.1f}s")
+        logging.info(f"Found: {tracker.section_count} sections, {tracker.image_count} images")
+```
+
+
+### 4. Database Updates
+
+#### 4.1 Modified Image Table Schema
+
+We want to add a confidence score to the database for sections
+
+```sql
+CREATE TABLE document_images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_id TEXT NOT NULL,
+    section_id TEXT NOT NULL,
+    page_number INTEGER NOT NULL,
+    image_data TEXT NOT NULL,           -- Base64 encoded if small
+    file_path TEXT,                     -- Path if stored on filesystem
+    caption TEXT,
+    image_format TEXT NOT NULL,         -- e.g., 'png', 'jpg'
+    image_size INTEGER NOT NULL,        -- Size in bytes
+    bbox TEXT NOT NULL,                 -- JSON encoded coordinates
+    confidence FLOAT NOT NULL DEFAULT 1.0,
+    FOREIGN KEY (doc_id) REFERENCES documents(id),
+    FOREIGN KEY (section_id) REFERENCES document_sections(section_id)
+);
+```
+
+#### 4.2 Section Schema confidence
+
+Modified Section Schema
+
+```sql
+-- Document's physical section structure
+CREATE TABLE document_sections (
+    section_id TEXT PRIMARY KEY,
+    doc_id TEXT NOT NULL,
+    parent_section_id TEXT,
+    level INTEGER NOT NULL,                 -- Header level (1=H1, etc)
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    sequence_order INTEGER NOT NULL,        -- Order in document
+    page_start INTEGER,
+    page_end INTEGER,
+    extraction_confidence FLOAT NOT NULL DEFAULT 0.0;
+    extraction_method TEXT;  -- Store which extractor found this section
+    FOREIGN KEY (doc_id) REFERENCES documents(id),
+    FOREIGN KEY (parent_section_id) REFERENCES document_sections(section_id)
+)
+```
+
+We can use confidence to help with subsequent semantic analysis. The system uses a 0.0-1.0 confidence scale for sections:
+
+1. **Low Confidence (0.0-0.3)**
+   - Basic header matching only
+   - Potential false positives
+   - Requires semantic verification
+   - Example: Text size changes or basic formatting hints
+
+2. **Medium Confidence (0.3-0.7)**
+   - Clear header markers found
+   - Logical structure present
+   - May need refinement
+   - Example: Consistent formatting with numbering
+
+3. **High Confidence (0.7-1.0)**
+   - Strong structural indicators
+   - Clear hierarchical markers
+   - PDF bookmarks present
+   - Example: Document outline or ToC matches
+
+Usage in semantic processing:
+
+```python
+def process_sections(sections: List[DocumentSection]):
+    for section in sections:
+        if section.extraction_confidence < 0.3:
+            # Apply aggressive semantic analysis
+            # Consider merging with nearby sections
+        elif section.extraction_confidence < 0.7:
+            # Validate against document structure
+            # Check for logical breaks
+        else:
+            # Trust section boundaries
+            # Focus on content analysis
+```
+
+### 5. Image Processing and Storage
+
+#### 5.1 Image Handler Component
+
+```python
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Protocol
+
+@dataclass
+class ImageMetadata:
+    """Metadata for extracted image"""
+    format: str
+    width: int
+    height: int
+    size_bytes: int
+    dpi: Optional[tuple[int, int]] = None
+    color_space: Optional[str] = None
+
+class ImageCaptioner(Protocol):
+    """Protocol for image captioning services"""
+    def generate_caption(self, image_data: bytes, context: str) -> str:
+        """Generate caption for image using surrounding context"""
+        ...
+
+class ImageHandler:
+    """Handles image processing, storage, and captioning"""
+    def __init__(
+        self,
+        db_client: DatabaseClient,
+        storage_dir: Path,
+        captioner: Optional[ImageCaptioner] = None,
+        size_limit: int = 1_000_000,  # 1MB
+    ):
+        self.db_client = db_client
+        self.storage_dir = storage_dir
+        self.captioner = captioner
+        self.size_limit = size_limit
+        
+    def process_image(
+        self,
+        image_data: bytes,
+        doc_id: str,
+        section_id: str,
+        context: str
+    ) -> DocumentImage:
+        """Process and store a single image"""
+        metadata = self._extract_metadata(image_data)
+        
+        # Determine storage method
+        if metadata.size_bytes <= self.size_limit:
+            stored_image = self._store_in_db(image_data, metadata)
+        else:
+            stored_image = self._store_in_fs(image_data, metadata, doc_id)
+            
+        # Generate caption if captioner available
+        caption = None
+        if self.captioner:
+            try:
+                caption = self.captioner.generate_caption(image_data, context)
+            except Exception as e:
+                logging.error(f"Caption generation failed: {e}")
+                
+        return self._create_db_record(
+            doc_id=doc_id,
+            section_id=section_id,
+            stored_image=stored_image,
+            metadata=metadata,
+            caption=caption
+        )
+        
+    def _extract_metadata(self, image_data: bytes) -> ImageMetadata:
+        """Extract image metadata using Pillow"""
+        ...
+        
+    def _store_in_db(
+        self, 
+        image_data: bytes, 
+        metadata: ImageMetadata
+    ) -> StoredImage:
+        """Store image as base64 in database"""
+        ...
+        
+    def _store_in_fs(
+        self, 
+        image_data: bytes, 
+        metadata: ImageMetadata,
+        doc_id: str
+    ) -> StoredImage:
+        """Store image in filesystem"""
+        ...
+```
+
+#### 5.2 Storage Strategy
+
+The system uses a hybrid storage approach based on image size:
+
+1. **Database Storage (≤ 1MB)**
+   - Convert to base64
+   - Store directly in SQLite
+   - Faster retrieval for small images
+   - Simpler backup/restore
+
+2. **Filesystem Storage (> 1MB)**
+   - Save to organized directory structure
+   - Store path reference in database
+   - Better performance for large images
+   - Reduced database bloat
+
+Directory Structure:
+```
+storage_dir/
+└── images/
+    └── {doc_id}/
+        └── {image_id}.{format}
+```
+
+#### 5.3 Image Captioning
+
+The system supports pluggable captioning services:
+
+```python
+class LLMImageCaptioner:
+    """LLM-based image captioning implementation"""
+    def __init__(self, llm_client: Any):
+        self.llm_client = llm_client
+        
+    def generate_caption(self, image_data: bytes, context: str) -> str:
+        """Generate caption using LLM"""
+        # Convert image for LLM if needed
+        # Combine with context
+        # Generate caption
+        # Return formatted result
+        ...
+
+class MockCaptioner:
+    """Simple captioner for testing"""
+    def generate_caption(self, image_data: bytes, context: str) -> str:
+        return "Test caption for image"
+```
+
+Caption Generation Process:
+1. Extract surrounding text context
+2. Process image if needed (resize, format)
+3. Generate caption with LLM
+4. Validate and store result
+
+#### 5.4 Image Processing Utilities
+
+```python
+class ImageProcessor:
+    """Utilities for image processing"""
+    @staticmethod
+    def validate_image(image_data: bytes) -> bool:
+        """Validate image data is correct and not corrupted"""
+        ...
+        
+    @staticmethod
+    def standardize_format(
+        image_data: bytes,
+        target_format: str = 'PNG'
+    ) -> tuple[bytes, str]:
+        """Convert image to standard format"""
+        ...
+        
+    @staticmethod
+    def optimize_image(
+        image_data: bytes,
+        max_size: int
+    ) -> tuple[bytes, ImageMetadata]:
+        """Optimize image while maintaining quality"""
+        ...
+```
+
+
+
+```
+</content>
+</file_6>
+
+<file_7>
+<path>2b.2_DocumentExtraction_Sectioning_Design.md</path>
+<content>
+```markdown
+# Document Section Analysis Technical Specification
+
+## Overview
+
+This document outlines the technical approach for analyzing and extracting document sections from full-text content, combining hierarchical structure analysis, semantic understanding, and flexible section numbering across different document types.
+
+## 1. Document Structure Analysis
+
+### 1.1 Example Document Structure
+
+Using Chapter 7: Aerobic Fermentation from a bioprocess engineering textbook as an example:
+
+```text
+Chapter 7: Aerobic Fermentation
+[Chapter intro text about aerobic fermentation basics...]
+
+7.1 Principles of Aerobic Fermentation
+[Level 1 intro text about core concepts...]
+
+    7.1.1 Oxygen Transfer Fundamentals
+    [Level 2 text about oxygen transfer...]
+    
+        7.1.1.1 Gas-Liquid Mass Transfer
+        [Level 3 text about mass transfer coefficients...]
+```
+
+### 1.2 Key Structural Properties
+
+1. **Hierarchical Nesting**
+   - Parent sections contain their intro text plus all subsection content
+   - Clear parent-child relationships through numbering
+   - Each level adds one number in the hierarchy
+   - Sequence matters within each level
+
+2. **Text Organization**
+   - Sections may have intro text before subsections begin
+   - Intro text belongs to the parent section
+   - Content is hierarchically nested
+   - Images and tables may appear within sections
+
+## 2. Schema Design
+
+### 2.1 Core Tables
+
+```sql
+-- Track section analysis attempts
+CREATE TABLE section_analyses (
+    analysis_id TEXT PRIMARY KEY,
+    doc_id TEXT NOT NULL,
+    doc_type TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (doc_type IN ('journal_article', 'trade_article', 'textbook', 'unknown')),
+    method TEXT NOT NULL,
+    parameters TEXT,              -- JSON of analysis parameters
+    source_text TEXT NOT NULL,    -- Text used for analysis
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY (doc_id) REFERENCES documents(id)
+);
+
+-- Track section hierarchy
+CREATE TABLE document_sections (
+    section_id TEXT PRIMARY KEY,
+    analysis_id TEXT NOT NULL,
+    section_number TEXT NOT NULL,     -- e.g., "7.1.1.2"
+    section_type TEXT,                -- e.g., 'abstract', 'methods'
+    level INTEGER NOT NULL,           -- 1, 2, 3, etc.
+    title TEXT NOT NULL,
+    intro_text TEXT,                  -- Text before subsections
+    start_offset INTEGER NOT NULL,    -- Start in source_text
+    end_offset INTEGER NOT NULL,      -- End in source_text
+    sequence_order INTEGER NOT NULL,  -- Order within level
+    FOREIGN KEY (analysis_id) REFERENCES section_analyses(analysis_id),
+    CHECK (section_type IN (
+        'abstract', 'introduction', 'methods', 'results', 
+        'discussion', 'conclusions', 'references', NULL
+    ))
+);
+
+-- Track section relationships explicitly
+CREATE TABLE section_relationships (
+    parent_section_id TEXT NOT NULL,
+    child_section_id TEXT NOT NULL,
+    PRIMARY KEY (parent_section_id, child_section_id),
+    FOREIGN KEY (parent_section_id) REFERENCES document_sections(section_id),
+    FOREIGN KEY (child_section_id) REFERENCES document_sections(section_id)
+);
+```
+
+### 2.2 Key Column Analysis
+
+#### intro_text
+- Self-contained content before subsections
+- Natural summary-level content
+- Good candidate for section-level embeddings
+- May be empty for leaf sections
+
+#### sequence_order
+- Integer-based for easy sorting
+- Restarts at 1 for each parent section
+- Independent of section numbering
+- Preserves original document flow
+
+#### section_number
+- Encodes full hierarchical path
+- Text format for flexibility
+- Natural sort ordering
+- Human readable
+
+## 3. Section Numbering Implementation
+
+### 3.1 Section Number Generator
+
+```python
+from enum import Enum
+from typing import Optional
+
+class DocumentType(str, Enum):
+    """Types of documents supported by the system."""
+    JOURNAL_ARTICLE = "journal_article"
+    TRADE_ARTICLE = "trade_article"
+    TEXTBOOK = "textbook"
+    UNKNOWN = "unknown"
+
+class SectionNumberGenerator:
+    """Generates section numbers based on document type and structure."""
+    
+    def __init__(self, doc_type: DocumentType = DocumentType.UNKNOWN):
+        self.doc_type = doc_type
+        self.current_level = {0: 0, 1: 0, 2: 0}  # Track numbers at each level
+        
+    def get_next_number(self, 
+                       level: int, 
+                       title: str,
+                       parent_number: Optional[str] = None) -> str:
+        """Generate next section number based on context."""
+        if self.doc_type == DocumentType.JOURNAL_ARTICLE:
+            return self._get_journal_number(level, title)
+        elif self.doc_type == DocumentType.TRADE_ARTICLE:
+            return self._get_trade_number(level, title)
+        else:  # TEXTBOOK or UNKNOWN
+            return self._get_generic_number(level, parent_number)
+
+    def _get_generic_number(self, 
+                          level: int, 
+                          parent_number: Optional[str] = None) -> str:
+        """Generate generic hierarchical number."""
+        # Reset lower levels
+        for l in range(level + 1, max(self.current_level.keys()) + 1):
+            self.current_level[l] = 0
+            
+        # Increment current level
+        self.current_level[level] += 1
+        
+        if parent_number:
+            return f"{parent_number}.{self.current_level[level]}"
+        elif level == 0:
+            return str(self.current_level[level])
+        else:
+            return f"{self.current_level[level]}"
+```
+
+## 4. Content Processing Functions
+
+### 4.1 Section Content Extraction
+
+```python
+def get_section_content(section_id: str, include_subsections: bool = True) -> str:
+    """Get section content with optional subsections."""
+    section = db.get_section(section_id)
+    analysis = db.get_analysis(section.analysis_id)
+    
+    if not include_subsections:
+        # Return just this section's intro text
+        return analysis.source_text[section.start_offset:section.end_offset]
+    
+    # Get all subsection content
+    subsections = db.get_subsections(section_id)
+    return _combine_section_content(section, subsections, analysis.source_text)
+
+def get_content_by_level(analysis_id: str, max_level: int) -> str:
+    """Get document content split to specified level."""
+    analysis = db.get_analysis(analysis_id)
+    sections = db.get_sections_by_level(analysis_id, max_level)
+    return _render_sections_by_level(sections, analysis.source_text)
+```
+
+### 4.2 Hierarchical Embeddings
+
+```python
+def create_hierarchical_embeddings(section_id: str) -> dict:
+    """Create embeddings at multiple levels."""
+    section = db.get_section(section_id)
+    
+    embeddings = {
+        # Level 1: Just intro text
+        "intro": embed_text(section.intro_text),
+        
+        # Level 2: Intro + immediate subsection intros
+        "summary": embed_text(_combine_with_subsection_intros(section)),
+        
+        # Level 3: Full content including subsections
+        "full": embed_text(_get_full_content(section))
+    }
+    
+    return embeddings
+```
+
+## 5. Search and Query Support
+
+### 5.1 Hierarchical Section Queries
+
+```sql
+-- Get full section hierarchy
+WITH RECURSIVE section_tree AS (
+    -- Base case: start with top-level section
+    SELECT 
+        s.*, 
+        0 as depth
+    FROM document_sections s
+    WHERE s.section_id = ?
+    
+    UNION ALL
+    
+    -- Recursive case: add children
+    SELECT 
+        c.*,
+        st.depth + 1
+    FROM section_tree st
+    JOIN section_relationships r ON st.section_id = r.parent_section_id
+    JOIN document_sections c ON r.child_section_id = c.section_id
+)
+SELECT * FROM section_tree
+ORDER BY section_number;
+```
+
+### 5.2 Multi-Level Search Strategy
+
+```python
+async def search_sections(query: str) -> List[SearchResult]:
+    """Multi-level section search."""
+    # Level 1: Search section intros only
+    intro_matches = await search_intros(query)
+    if intro_matches:
+        return intro_matches
+        
+    # Level 2: Search with subsection context
+    subsection_matches = await search_with_context(query)
+    if subsection_matches:
+        return subsection_matches
+        
+    # Level 3: Full content search
+    return await search_full_content(query)
+```
+
+## 6. Design Benefits
+
+1. **Natural Summarization Levels**
+   - intro_text provides ready-made summaries
+   - section_number enables hierarchical rollup
+   - sequence_order maintains document flow
+
+2. **Flexible Document Support**
+   - Adapts to different document types
+   - Handles standard academic sections
+   - Supports less formal structures
+
+3. **Rich Context Management**
+   - Full path available for each section
+   - Order preserved within levels
+   - Clear parent-child relationships
+
+4. **Future Extensibility**
+   - Easy to add new document types
+   - Can enhance section type recognition
+   - Supports custom numbering schemes
+```
+</content>
+</file_7>
+
+<file_8>
 <path>2b_Document_Extraction.md</path>
 <content>
 ```markdown
@@ -1231,9 +2005,9 @@ erDiagram
 ```    
 ```
 </content>
-</file_6>
+</file_8>
 
-<file_7>
+<file_9>
 <path>2c_Document_Semantics.md</path>
 <content>
 ```markdown
@@ -1695,4 +2469,4 @@ classDiagram
 - parse the logs at a later date for stats
 ```
 </content>
-</file_7>
+</file_9>

@@ -1,4 +1,4 @@
-#!base_path=/Users/nicholasgrundl/projects/ragnostic/src
+#!base_path=/home/nicholasgrundl/projects/ragnostic/src
 src
 └── ragnostic
     ├── db
