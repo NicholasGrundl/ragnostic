@@ -63,11 +63,11 @@ def parse_tree_file(tree_file: Path) -> tuple[Path, List[str]]:
                 
                 # Validate level change
                 level_diff = prev_level - level
-                if level > prev_level + 1:
-                    raise ValueError(
-                        f"Invalid indentation at line {line_num}: "
-                        f"Can't increase more than one level at once"
-                    )
+                # if level > prev_level + 1:
+                #     raise ValueError(
+                #         f"Invalid indentation at line {line_num}: "
+                #         f"Can't increase more than one level at once"
+                #     )
                 
                 # Determine if item is a directory
                 # Consider it a directory if it has no extension or is a hidden folder
