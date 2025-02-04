@@ -1,4 +1,4 @@
-#!base_path=/home/nicholasgrundl/projects/ragnostic/tests
+#!base_path=/Users/nicholasgrundl/projects/ragnostic/tests
 tests
 ├── ingestion_indexer
 │   ├── __init__.py

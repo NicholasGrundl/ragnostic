@@ -1,4 +1,4 @@
-#!base_path=/home/nicholasgrundl/projects/ragnostic/docs
+#!base_path=/Users/nicholasgrundl/projects/ragnostic/docs
 docs
 ├── 0a_README.md
 ├── 0b_ACTIONITEMS.md

@@ -513,6 +513,129 @@ DocumentSection.model_rebuild()
 </file_5>
 
 <file_6>
+<path>ragnostic/extraction/__init__.py</path>
+<content>
+```python
+
+```
+</content>
+</file_6>
+
+<file_7>
+<path>ragnostic/extraction/workflow/__init__.py</path>
+<content>
+```python
+
+```
+</content>
+</file_7>
+
+<file_8>
+<path>ragnostic/extraction/workflow/actions.py</path>
+<content>
+```python
+import pathlib
+from burr.core import State, action, ApplicationBuilder
+from burr.core import when
+
+from ragnostic import utils
+
+@action(reads=[], writes=["document_kind"])
+def document_router(state: State, doc_id: str, db_connection) -> State:
+    """Determine how to process the doc"""
+
+    # Determine how to process the doc id based on the library entry
+    # - Is it a PDF or a HTML?
+    # - has it already been processed before?
+
+    #Design Choices:
+    # - should we load the document here or later?
+    # - if loaded should we store it in the state as a python object?
+    return state.update(document_kind='pdf')
+
+@action(reads=[], writes=[])
+def text_extraction(state: State, db_connection) -> State:
+    """extract text"""
+    # Extract text from pdf
+    # - use the docling parser
+    # - grab the raw text as is initially
+
+    # Design Choices:
+    # - should we store the docling parsed object in state and run various extraction steps on it?
+    return state
+
+@action(reads=[], writes=[])
+def image_extraction(state: State, db_connection) -> State:
+    """extract image"""
+
+    # Extract and add images to database
+    # - take docling object and put images with their metadata in the database
+    
+    # Design Choices:
+    # - what inputs do we need? the docling objkect? the doc id and load it from database?
+    
+    return state
+
+@action(reads=[], writes=[])
+def table_extraction(state: State, db_connection) -> State:
+    """extract table"""
+    # Extract and add tables to database
+    # - take docling object and put tables with their metadata in the database
+    
+    # Design Choices:
+    # - what inputs do we need? the docling object? the doc id and load it from database?
+    
+    return state
+
+@action(reads=[], writes=[])
+def wikipedia_extraction(state: State, db_connection) -> State:
+    """extract wikipedia"""
+
+    # Design choices
+    # Should we grab the HTML and store it then parse?
+    # - should we just use the wikipedia API?
+    # - should we do an image step later as well? 
+    # - how would we identify images?
+    return state
+
+@action(reads=[], writes=[])
+def metadata_extraction(state: State, db_connection) -> State:
+    """extract table"""
+
+    # Compile the metadata based on the previous steps
+    # - does it have images, tables, etc?
+    # - how many pages, etc
+    # - status updates on the steps, flags, etc.
+    
+    return state
+    
+# Build and visualize graph/logic
+(
+    ApplicationBuilder()
+    .with_actions(
+        route=document_router, 
+        pdf_text=text_extraction, 
+        pdf_image=image_extraction, 
+        pdf_table=table_extraction,
+        pdf_metadata=metadata_extraction,
+        wiki_extraction=wikipedia_extraction,
+    )
+    .with_transitions(
+        ("route", "pdf_text", when(document_kind='pdf')),
+        ("pdf_text", "pdf_image"),
+        ("pdf_image", "pdf_table"),
+        ("pdf_table", "pdf_metadata"),
+        ("route", "wiki_extraction", ~when(document_kind='pdf')),
+        ("wiki_extraction", "pdf_metadata"),
+    )
+    .with_entrypoint("route")
+    .build()
+)
+```
+</content>
+</file_8>
+
+<file_9>
 <path>ragnostic/ingestion/__init__.py</path>
 <content>
 ```python
@@ -527,9 +650,9 @@ from .utils import create_doc_id
 
 ```
 </content>
-</file_6>
+</file_9>
 
-<file_7>
+<file_10>
 <path>ragnostic/ingestion/indexing/__init__.py</path>
 <content>
 ```python
@@ -545,9 +668,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_7>
+</file_10>
 
-<file_8>
+<file_11>
 <path>ragnostic/ingestion/indexing/extraction.py</path>
 <content>
 ```python
@@ -678,9 +801,9 @@ class PDFExtractor:
         )
 ```
 </content>
-</file_8>
+</file_11>
 
-<file_9>
+<file_12>
 <path>ragnostic/ingestion/indexing/indexer.py</path>
 <content>
 ```python
@@ -828,9 +951,9 @@ class DocumentIndexer:
         return results
 ```
 </content>
-</file_9>
+</file_12>
 
-<file_10>
+<file_13>
 <path>ragnostic/ingestion/indexing/schema.py</path>
 <content>
 ```python
@@ -895,9 +1018,9 @@ class BatchIndexingResult(BaseModel):
         return len(self.failed_docs)
 ```
 </content>
-</file_10>
+</file_13>
 
-<file_11>
+<file_14>
 <path>ragnostic/ingestion/monitor/__init__.py</path>
 <content>
 ```python
@@ -913,9 +1036,9 @@ __all__ = [
 
 ```
 </content>
-</file_11>
+</file_14>
 
-<file_12>
+<file_15>
 <path>ragnostic/ingestion/monitor/monitor.py</path>
 <content>
 ```python
@@ -989,9 +1112,9 @@ class DirectoryMonitor:
         )
 ```
 </content>
-</file_12>
+</file_15>
 
-<file_13>
+<file_16>
 <path>ragnostic/ingestion/monitor/schema.py</path>
 <content>
 ```python
@@ -1022,9 +1145,9 @@ class MonitorResult(BaseModel):
 
 ```
 </content>
-</file_13>
+</file_16>
 
-<file_14>
+<file_17>
 <path>ragnostic/ingestion/processor/__init__.py</path>
 <content>
 ```python
@@ -1040,9 +1163,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_14>
+</file_17>
 
-<file_15>
+<file_18>
 <path>ragnostic/ingestion/processor/processor.py</path>
 <content>
 ```python
@@ -1136,9 +1259,9 @@ class DocumentProcessor:
         return result
 ```
 </content>
-</file_15>
+</file_18>
 
-<file_16>
+<file_19>
 <path>ragnostic/ingestion/processor/schema.py</path>
 <content>
 ```python
@@ -1193,9 +1316,9 @@ class BatchProcessingResult(BaseModel):
         return len(self.failed_docs)
 ```
 </content>
-</file_16>
+</file_19>
 
-<file_17>
+<file_20>
 <path>ragnostic/ingestion/processor/storage.py</path>
 <content>
 ```python
@@ -1279,9 +1402,9 @@ def store_document(
     })
 ```
 </content>
-</file_17>
+</file_20>
 
-<file_18>
+<file_21>
 <path>ragnostic/ingestion/utils.py</path>
 <content>
 ```python
@@ -1315,9 +1438,9 @@ def create_doc_id(prefix: str = "DOC", size: int = 12, alphabet: str = DEFAULT_A
 
 ```
 </content>
-</file_18>
+</file_21>
 
-<file_19>
+<file_22>
 <path>ragnostic/ingestion/validation/__init__.py</path>
 <content>
 ```python
@@ -1334,9 +1457,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_19>
+</file_22>
 
-<file_20>
+<file_23>
 <path>ragnostic/ingestion/validation/checks.py</path>
 <content>
 ```python
@@ -1444,9 +1567,9 @@ def check_hash_unique(filepath: Path, file_hash: str, db_client: DatabaseClient)
 
 ```
 </content>
-</file_20>
+</file_23>
 
-<file_21>
+<file_24>
 <path>ragnostic/ingestion/validation/schema.py</path>
 <content>
 ```python
@@ -1495,9 +1618,9 @@ class BatchValidationResult(BaseModel):
         return len(self.invalid_files) > 0
 ```
 </content>
-</file_21>
+</file_24>
 
-<file_22>
+<file_25>
 <path>ragnostic/ingestion/validation/validator.py</path>
 <content>
 ```python
@@ -1613,9 +1736,9 @@ class DocumentValidator:
         return results
 ```
 </content>
-</file_22>
+</file_25>
 
-<file_23>
+<file_26>
 <path>ragnostic/ingestion/workflow/__init__.py</path>
 <content>
 ```python
@@ -1641,9 +1764,9 @@ __all__ = [
 ]
 ```
 </content>
-</file_23>
+</file_26>
 
-<file_24>
+<file_27>
 <path>ragnostic/ingestion/workflow/actions.py</path>
 <content>
 ```python
@@ -1791,9 +1914,9 @@ def indexing_action(
     return state.update(indexing_result=indexing_result, error=None)
 ```
 </content>
-</file_24>
+</file_27>
 
-<file_25>
+<file_28>
 <path>ragnostic/ingestion/workflow/application.py</path>
 <content>
 ```python
@@ -1871,4 +1994,4 @@ def run_ingestion(ingest_dir = "./ingest", **kwargs):
 
 ```
 </content>
-</file_25>
+</file_28>

@@ -1,4 +1,4 @@
-#!base_path=/home/nicholasgrundl/projects/ragnostic/src
+#!base_path=/Users/nicholasgrundl/projects/ragnostic/src
 src
 └── ragnostic
     ├── db
@@ -6,6 +6,11 @@ src
     │   ├── client.py
     │   ├── models.py
     │   └── schema.py
+    ├── extraction
+    │   ├── workflow
+    │   │   ├── __init__.py
+    │   │   └── actions.py
+    │   └── __init__.py
     ├── ingestion
     │   ├── indexing
     │   │   ├── __init__.py
