@@ -22,7 +22,7 @@ The system is responsible for:
 ## System Architecture
 
 ### PDF Flow
-```
+```mermaid
 flowchart TB
     %% Input node
     input[PDF Content]
