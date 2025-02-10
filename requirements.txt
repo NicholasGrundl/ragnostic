@@ -7,6 +7,9 @@ torch
 torchvision
 torchaudio
 
+#OCR
+tesserocr
+
 #PDF Parsing
 docling
 # marker-pdf

@@ -138,6 +138,16 @@ We are going to go the more stable and classic route of conda and pip
     - `requirements.txt`
     - `requirements-dev.txt`
 
+### Tesseract OCR
+
+We preferrably use tesseract OCR for its powerful object recognition. We also prefer to install it in conda for consistent installs across OS and container systems.
+
+For usage in our python package we need to do the following:
+1. verify location of tesseract directory:
+- `ls {path_to_conda}/miniconda3/envs/ragnostic/share/tessdata/`
+2. set the TESSDATA_PREFIX environment data to path from 1.
+3. verify language is accessible
+- `tesseract --list-langs`
 
 ## Envrionment Vars
 
@@ -145,3 +155,5 @@ We are going to go the more stable and classic route of conda and pip
     a. specify GPU architecture
     - check with: ``
     - for TheBeast: `export TORCH_CUDA_ARCH_LIST="8.6"`
+
+2. TESSDATA_PREFIX={path_to_conda}/miniconda3/envs/ragnostic/share/tessdata/
