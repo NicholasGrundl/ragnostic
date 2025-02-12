@@ -12,7 +12,6 @@ def build_ingestion_workflow(
     """Build the document ingestion workflow application.
     
     Args:
-        ingest_dir: Directory to monitor for new documents
         storage_dir: Directory to store processed documents
         db_path: Optional path to SQLite database. If None creates a new one
         max_file_size: Maximum allowed file size in bytes
@@ -46,7 +45,6 @@ def build_ingestion_workflow(
     )
     
     app = app.with_entrypoint("monitor")
-
 
     return app.build()
 

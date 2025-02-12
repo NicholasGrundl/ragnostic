@@ -2,96 +2,89 @@ import pathlib
 from burr.core import State, action, ApplicationBuilder
 from burr.core import when
 
-from ragnostic import utils
+from ragnostic.db.client import DatabaseClient
 
-@action(reads=[], writes=["document_kind"])
-def document_router(state: State, doc_id: str, db_connection) -> State:
-    """Determine how to process the doc"""
-
-    # Determine how to process the doc id based on the library entry
-    # - Is it a PDF or a HTML?
-    # - has it already been processed before?
-
-    #Design Choices:
-    # - should we load the document here or later?
-    # - if loaded should we store it in the state as a python object?
-    return state.update(document_kind='pdf')
-
-@action(reads=[], writes=[])
-def text_extraction(state: State, db_connection) -> State:
-    """extract text"""
-    # Extract text from pdf
-    # - use the docling parser
-    # - grab the raw text as is initially
-
-    # Design Choices:
-    # - should we store the docling parsed object in state and run various extraction steps on it?
+@action(reads=[], writes=["config"])
+def converter_configure(state: State, config_path: str) -> State:
     return state
 
-@action(reads=[], writes=[])
-def image_extraction(state: State, db_connection) -> State:
-    """extract image"""
+@action(reads=["config"], writes=["document_id", "conversion_result"])
+def converter_run(state: State, document_id: str, db_client: DatabaseClient,) -> State:
+    # load filepath from db
 
-    # Extract and add images to database
-    # - take docling object and put images with their metadata in the database
-    
-    # Design Choices:
-    # - what inputs do we need? the docling objkect? the doc id and load it from database?
+    # setup pipeline
+
+    # convert document
+
+    # deal with errors
+    return state
+
+@action(reads=["conversion_result"], writes=["conversion_status"])
+def converter_handle(state: State) -> State:
+    """Handle conversion errors and status"""
+
+    # Check conversion status
+
+    # update state decision variable
+    return state
+
+@action(reads=["document_id", "conversion_status"], writes=[])
+def converter_fail(state: State, db_client: DatabaseClient,) -> State:
+    """Handle conversion failure"""
+    # Update DB with info/status
+
+    # Trigger notifications as needed
     
     return state
 
-@action(reads=[], writes=[])
-def table_extraction(state: State, db_connection) -> State:
-    """extract table"""
-    # Extract and add tables to database
-    # - take docling object and put tables with their metadata in the database
-    
-    # Design Choices:
-    # - what inputs do we need? the docling object? the doc id and load it from database?
+@action(reads=["document_id", "conversion_status"], writes=[])
+def converter_success(state: State, db_client: DatabaseClient,) -> State:
+    """Handle conversion success"""
+    # Update DB with info/status
+
+    # Trigger notifications as needed
     
     return state
 
-@action(reads=[], writes=[])
-def wikipedia_extraction(state: State, db_connection) -> State:
-    """extract wikipedia"""
+@action(reads=["conversion_result"], writes=["extraction_content","extraction_status"])
+def extraction_run(state: State) -> State:
+    """Extract parts from the docling conversion"""
+    # Extract all parts    
 
-    # Design choices
-    # Should we grab the HTML and store it then parse?
-    # - should we just use the wikipedia API?
-    # - should we do an image step later as well? 
-    # - how would we identify images?
+    # update status as needed
     return state
 
-@action(reads=[], writes=[])
-def metadata_extraction(state: State, db_connection) -> State:
-    """extract table"""
+@action(reads=["document_id","extraction_content"], writes=["extraction_status"])
+def extraction_store(state: State, db_client: DatabaseClient,) -> State:
+    """Store all items in db"""
+    # Store in DB
 
-    # Compile the metadata based on the previous steps
-    # - does it have images, tables, etc?
-    # - how many pages, etc
-    # - status updates on the steps, flags, etc.
+    # log any errors
     
     return state
     
-# Build and visualize graph/logic
-(
-    ApplicationBuilder()
-    .with_actions(
-        route=document_router, 
-        pdf_text=text_extraction, 
-        pdf_image=image_extraction, 
-        pdf_table=table_extraction,
-        pdf_metadata=metadata_extraction,
-        wiki_extraction=wikipedia_extraction,
-    )
-    .with_transitions(
-        ("route", "pdf_text", when(document_kind='pdf')),
-        ("pdf_text", "pdf_image"),
-        ("pdf_image", "pdf_table"),
-        ("pdf_table", "pdf_metadata"),
-        ("route", "wiki_extraction", ~when(document_kind='pdf')),
-        ("wiki_extraction", "pdf_metadata"),
-    )
-    .with_entrypoint("route")
-    .build()
-)
+
+@action(reads=["extraction_content","extraction_status"], writes=["extraction_status"])
+def extraction_handle(state: State) -> State:
+    """Handle extraction errors and status"""
+    # Check extraction status
+
+    # update state decision variable
+    return state
+
+@action(reads=["document_id","extraction_status"], writes=[])
+def extraction_fail(state: State, db_client: DatabaseClient,) -> State:
+    """Handle extraction failure"""
+    # Update DB with info/status
+
+    # Trigger notifications as needed
+    return state
+
+@action(reads=["document_id","extraction_status"], writes=[])
+def extraction_success(state: State, db_client: DatabaseClient) -> State:
+    """Handle extraction success"""
+    # Update DB with info/status
+
+    # Trigger notifications as needed
+    return state
+    

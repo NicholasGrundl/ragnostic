@@ -72,8 +72,26 @@ The packages are a bit finnicky and some non python packages are required. Due t
 
 ## MacOS Intel
 
-> Due to pytorch versions being old on intel macOS i didnt get the marker pdf to run. Ill try it again on my WSL beast and see what happends.
 
+1. Setup a new miniconda env
+
+2. Install the OS specific packages (mostly OCR)
+    a. poppler: image analysis
+    - `conda install -c conda-forge poppler`
+    b. Tesseract
+    - `conda install -c conda-forge tesseract`
+    c. graphviz
+    - `conda install graphviz`
+
+3. Install packages and dev packages
+    a. Use the Makefile routine
+    - `make install`
+    b. Alternatively use the requiremetns files
+    - `requirements.txt`
+    - `requirements-dev.txt`
+    - 
+### Marker issues attempt
+> Due to pytorch versions being old on intel macOS i didnt get the marker pdf to run. Ill try it again on my WSL beast and see what happends.
 1. poppler: image analysis
     - `brew install poppler`
 
