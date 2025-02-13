@@ -89,32 +89,14 @@ The packages are a bit finnicky and some non python packages are required. Due t
     b. Alternatively use the requiremetns files
     - `requirements.txt`
     - `requirements-dev.txt`
-    - 
-### Marker issues attempt
-> Due to pytorch versions being old on intel macOS i didnt get the marker pdf to run. Ill try it again on my WSL beast and see what happends.
-1. poppler: image analysis
-    - `brew install poppler`
 
-2. Pytorch: CPU or GPU depending on machine
-    - `uv add torch torchvision`
-    > You may need to install an explicit CPU version, in that case:
-    > `uv pip install --index-url https://download.pytorch.org/whl/cpu torch==2.1.0 torchvision==0.16.0`
-
-3. PDF extraction packages
-    - `uv add pymupdf4llm`
-    - `uv add py-zerox`
-    > marker-pdf is an early unstable version on mac intel
-    > docling for intel mac with pinned pytorch is incompatible
-
-4. Web search and wikipedia
-   - `uv add brave-search`
-   - `uv add wikipedia wikipedia-api`
-
-5. Workflows and DAGs
-   - `uv add burr[start]`
-
-6. Indexing
-   - `uv add llama_index`
+4. Disable Burr anonymous telemetry
+   - Touch or find the conf file `~/.burr.conf`
+   - Update values
+        ```
+        [DEFAULT]
+        telemetry_enabled = False
+        ```
 
 ## Ubuntu Intel + GPU
 
@@ -175,3 +157,35 @@ For usage in our python package we need to do the following:
     - for TheBeast: `export TORCH_CUDA_ARCH_LIST="8.6"`
 
 2. TESSDATA_PREFIX={path_to_conda}/miniconda3/envs/ragnostic/share/tessdata/
+
+
+
+
+# Notes/ Working
+
+## Testing UV and MarkerPDF package
+
+> Due to pytorch versions being old on intel macOS i didnt get the marker pdf to run. Ill try it again on my WSL beast and see what happends.
+1. poppler: image analysis
+    - `brew install poppler`
+
+2. Pytorch: CPU or GPU depending on machine
+    - `uv add torch torchvision`
+    > You may need to install an explicit CPU version, in that case:
+    > `uv pip install --index-url https://download.pytorch.org/whl/cpu torch==2.1.0 torchvision==0.16.0`
+
+3. PDF extraction packages
+    - `uv add pymupdf4llm`
+    - `uv add py-zerox`
+    > marker-pdf is an early unstable version on mac intel
+    > docling for intel mac with pinned pytorch is incompatible
+
+4. Web search and wikipedia
+   - `uv add brave-search`
+   - `uv add wikipedia wikipedia-api`
+
+5. Workflows and DAGs
+   - `uv add burr[start]`
+
+6. Indexing
+   - `uv add llama_index`

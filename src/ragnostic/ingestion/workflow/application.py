@@ -61,7 +61,12 @@ def run_ingestion(ingest_dir = "./ingest", **kwargs):
     max_file_size = kwargs.get('max_file_size', 100 * 1024 * 1024)  # 100MB
     text_preview_chars = kwargs.get('text_preview_chars', 1000)
 
-    workflow = build_ingestion_workflow(**kwargs)
+    workflow = build_ingestion_workflow(
+        storage_dir = storage_dir,
+        db_path = db_path,
+        max_file_size = max_file_size,
+        text_preview_chars = text_preview_chars,
+    )
     *_, state = workflow.run(
         halt_after=['indexing'],
         inputs={"ingest_dir": ingest_dir}

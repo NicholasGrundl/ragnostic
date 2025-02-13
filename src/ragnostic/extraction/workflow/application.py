@@ -1,18 +1,20 @@
 import pathlib
-from burr.core import ApplicationBuilder
+from burr import core
 from ragnostic import extraction
 from ragnostic import db
 
-def build_ingestion_workflow(
-    config_path: str = "./config.yaml",
+def build_extraction_workflow(
+    config_path: str | None = None,
     db_path: str | None = None,
+    tracker_project: str | None = None,
 ):
     """Build the document extraction workflow application.
     
     Args:
         config_path: PAth to configuration file
         db_path: Optional path to SQLite database. If None creates a new one
-        
+        tracker_project: Optional, if specified adds a tracker
+
     Returns:
         Configured workflow application
     """
@@ -22,11 +24,11 @@ def build_ingestion_workflow(
     db_client = db.DatabaseClient(db_url)
     
     # Build workflow
-    app = ApplicationBuilder()
+    app = core.ApplicationBuilder()
     
     # Add monitor action
     app = app.with_actions(
-        converter_configure=extraction.converter_configure, 
+        converter_configure=extraction.converter_configure.bind(config_path=config_path), 
         converter_run=extraction.converter_run.bind(db_client=db_client), 
         converter_handle=extraction.converter_handle, 
         converter_fail=extraction.converter_fail.bind(db_client=db_client),
@@ -41,15 +43,18 @@ def build_ingestion_workflow(
     app = app.with_transitions(
         ("converter_configure", "converter_run"),
         ("converter_run", "converter_handle"),
-        ("converter_handle", "converter_fail", when(conversion_status='fail')),
-        ("converter_handle", "converter_success", when(conversion_status='success')),
+        ("converter_handle", "converter_fail", core.when(conversion_status='fail')),
+        ("converter_handle", "converter_success", core.when(conversion_status='success')),
         ("converter_success", "extraction_run"),
         ("extraction_run", "extraction_store"),
         ("extraction_store", "extraction_handle"),
-        ("extraction_handle", "extraction_fail", when(extraction_status='fail')),
-        ("extraction_handle", "extraction_success", when(extraction_status='success')),
+        ("extraction_handle", "extraction_fail", core.when(extraction_status='fail')),
+        ("extraction_handle", "extraction_success", core.when(extraction_status='success')),
         
     )
+
+    if tracker_project:
+        app = app.with_tracker(project='ragnostic')
 
     app = app.with_entrypoint("converter_configure")
 
@@ -64,12 +69,17 @@ def run_extraction(document_id: str | None = None, **kwargs):
         **kwargs: Additional arguments for build_ingestion_workflow
     """
     # Default args from environment
-    storage_dir = kwargs.get('config_path', './config.yaml')
+    config_path = kwargs.get('config_path', None)
     db_path = kwargs.get('db_path', None)
-    
-    workflow = build_ingestion_workflow(**kwargs)
+    tracker_project = kwargs.get('tracker_project', 'ragnostic')
+
+    workflow = build_extraction_workflow(
+        config_path = config_path,
+        db_path = db_path,
+        tracker_project = tracker_project,
+    )
     *_, state = workflow.run(
-        halt_after=['extraction_fail','extraction_success'],
+        halt_after=['converter_fail','extraction_fail','extraction_success'],
         inputs={"document_id": document_id}
     )
     return state
