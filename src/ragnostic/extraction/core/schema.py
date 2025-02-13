@@ -47,7 +47,7 @@ class ExtractedText(ExtractedContent):
 class ExtractedImage(ExtractedContent):
     """Image extracted from document."""
     content_type: ContentType = ContentType.IMAGE
-    image_data: bytes = Field(description="Raw image data")
+    image_data: str = Field(description="base 64 encoded image data")
     format: str = Field(description="Image format (e.g., 'png', 'jpg')")
     size_bytes: int = Field(description="Size of image in bytes")
     caption: Optional[str] = None
@@ -60,23 +60,6 @@ class ExtractedTable(ExtractedContent):
     headers: Optional[List[str]] = None
     caption: Optional[str] = None
 
-
-class ExtractedSection(BaseModel):
-    """Section detected in document."""
-    section_id: str
-    title: str
-    level: int = Field(description="Header level (1=H1, etc)")
-    content: List[ExtractedContent] = Field(
-        default_factory=list,
-        description="Ordered list of content in section"
-    )
-    parent_id: Optional[str] = None
-    page_start: int
-    page_end: int
-    confidence: float = Field(
-        default=0.0, ge=0.0, le=1.0,
-        description="Confidence in section detection"
-    )
 
 
 class ExtractionError(BaseModel):
@@ -92,7 +75,7 @@ class ExtractionError(BaseModel):
 class ExtractionResult(BaseModel):
     """Results of document extraction."""
     doc_id: str
-    sections: List[ExtractedSection]
+    content: List[ExtractedContent] = Field(default_factory=list)
     extraction_date: datetime = Field(
         default_factory=lambda: datetime.now(datetime.UTC)
     )

@@ -7,7 +7,7 @@ from docling.datamodel.document import ConversionResult
 
 from ragnostic.db.client import DatabaseClient
 from .. import configuration
-from .. import extract_contents
+from ..core import docling_extraction
 
 @action(reads=[], writes=["config"])
 def converter_configure(state: State, config_path: str | None = None) -> State:
@@ -102,7 +102,7 @@ def extraction_run(state: State) -> State:
     doc = state['conversion_document']
     
     # Extract all parts    
-    contents = extract_contents.extract_contents_from_doc(doc=doc)
+    contents = docling_extraction.extract_contents_from_doc(doc=doc)
 
     # update status as needed
     status = 'success'

@@ -4,11 +4,16 @@ import base64
 
 from docling_core.types.doc import TextItem, PictureItem, TableItem
 from docling_core.types.doc.document import DoclingDocument
-from .core.schema import ContentType, ContentLocation
-from .core.schema import ExtractedContent, ExtractedText, ExtractedImage, ExtractedTable
+from .schema import ContentType, ContentLocation
+from .schema import ExtractedContent, ExtractedText, ExtractedImage, ExtractedTable
 
-def extract_contents_from_doc(doc : DoclingDocument)->list[ExtractedText | ExtractedImage | ExtractedTable]:
-    """Extract contents into pydantic classes"""
+def extract_contents_from_doc(
+    doc : DoclingDocument
+)->list[ExtractedText | ExtractedImage | ExtractedTable]:
+    """Pull contents from a docling object
+    into internally consistent pydantic classes for
+    using in our database
+    """
     extracted_contents = []
         
     # Iterate through document items in reading order
@@ -84,7 +89,12 @@ def extract_contents_from_doc(doc : DoclingDocument)->list[ExtractedText | Extra
             
             location = ContentLocation(
                 page=item.prov[0].page_no if item.prov else 1,
-                bbox=(0, 0, 0, 0)  # Extract from item metadata if needed
+                bbox=(
+                    item.prov[0].bbox.l,
+                    item.prov[0].bbox.t,
+                    item.prov[0].bbox.r,
+                    item.prov[0].bbox.b
+                )
             )
             
             extracted_table = ExtractedTable(
@@ -94,4 +104,6 @@ def extract_contents_from_doc(doc : DoclingDocument)->list[ExtractedText | Extra
                 caption=None #update this later
             )
             extracted_contents.append(extracted_table)
+
+    
     return extracted_contents

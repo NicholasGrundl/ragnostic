@@ -2,9 +2,24 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Protocol, Iterator, Optional
+from typing import Protocol, Iterator, Optional, Any
+import logging
 
-from .schema import ExtractionResult
+from docling_core.types.doc.document import DoclingDocument
+from .schema import (
+    ExtractionResult,
+    ExtractedSection,
+    ExtractedText,
+    ExtractedImage,
+    ExtractedTable,
+    ContentLocation,
+    ExtractionError
+)
+
+logger = logging.getLogger(__name__)
+
+
+
 
 
 class DocumentExtractor(Protocol):
@@ -15,8 +30,8 @@ class DocumentExtractor(Protocol):
         """Name of the extractor."""
         ...
     
-    def extract_document(self, file_path: Path) -> ExtractionResult:
-        """Extract content from document.
+    def extract_document(self, document: Any) -> ExtractionResult:
+        """Extract content from a docling document.
         
         Args:
             file_path: Path to document to process
@@ -28,6 +43,43 @@ class DocumentExtractor(Protocol):
             ExtractionError: If extraction fails
         """
         ...
+
+
+
+class DoclingExtractor:
+    """Docling-based document extractor implementation."""
+    
+    name: str = "docling"
+    
+    def __init__(self, image_min_size: int = 100):
+        self.image_min_size = image_min_size
+        
+    def extract_document(self, document: DoclingDocument) -> ExtractionResult:
+        try:
+            # Load document with docling
+            doc = document
+            # Extraction Calls
+            
+            
+            
+            
+        except Exception as e:
+            logger.exception(f"Failed to extract document: {document}")
+            return ExtractionResult(
+                extractor_name=self.name,
+                error_messages=[
+                    ExtractionError(
+                        error_type="extraction_failed",
+                        message=str(e),
+                        recoverable=False
+                    )
+                ]
+            )
+
+        # return successful result
+        return ExtractionResult(extractor_name=self.name)
+    
+
 
 
 class ExtractionProgress(ABC):
