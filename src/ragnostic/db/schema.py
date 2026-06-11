@@ -135,5 +135,44 @@ class DocumentTable(DocumentTableBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DocumentChunkBase(BaseModel):
+    """Base document chunk schema."""
+    chunk_id: str
+    doc_id: str
+    section_id: Optional[str] = None
+    sequence_order: int
+    text: str
+    word_count: int = Field(default=0)
+
+
+class DocumentChunkCreate(DocumentChunkBase):
+    """Schema for creating a document chunk."""
+    pass
+
+
+class DocumentChunk(DocumentChunkBase):
+    """Schema for reading a document chunk."""
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentSummaryBase(BaseModel):
+    """Base document summary schema."""
+    doc_id: str
+    summary: str
+    method: Optional[str] = None
+
+
+class DocumentSummaryCreate(DocumentSummaryBase):
+    """Schema for creating a document summary."""
+    pass
+
+
+class DocumentSummary(DocumentSummaryBase):
+    """Schema for reading a document summary."""
+    created_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # Update forward references for nested models
 DocumentSection.model_rebuild()

@@ -1,27 +1,10 @@
 """
 Basic utilities for document ingestion.
+
+Kept for backward compatibility; canonical implementation lives in
+ragnostic.utils so non-ingestion modules can use it without importing the
+ingestion package.
 """
-import string
+from ragnostic.utils import DEFAULT_ALPHABET, create_doc_id
 
-from nanoid import generate
-
-DEFAULT_ALPHABET = string.ascii_lowercase + string.digits  # 0-9a-z
-
-def create_doc_id(prefix: str = "DOC", size: int = 12, alphabet: str = DEFAULT_ALPHABET) -> str:
-    """
-    Create a new document ID with optional prefix.
-    
-    Args:
-        prefix: String prefix for the ID (default: "DOC")
-        size: Length of the random portion (default: 12)
-        alphabet: String of characters to use for ID generation (default: numbers and lowercase letters)
-    
-    Returns:
-        Document ID string in format {prefix}_{random string}
-    
-    Example:
-        >>> create_doc_id("PDF")
-        'PDF_x1y2z3a4b5c6'
-    """
-    random_id = generate(alphabet=alphabet, size=size)
-    return f"{prefix}_{random_id}"
+__all__ = ["DEFAULT_ALPHABET", "create_doc_id"]

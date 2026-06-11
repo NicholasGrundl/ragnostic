@@ -1,5 +1,26 @@
 # Action Items
 
+## MVP RAG pipeline — DONE
+
+The end-to-end two-tier RAG pipeline is implemented and demoable
+(`make demo`, see `docs/3_MVP_RAG_Pipeline.md`):
+- [x] Packaging fixed: `pyproject.toml` declares runtime deps + optional extras; `pip install -e .` works
+- [x] DB schema: added `document_chunks` + `document_summaries`, client CRUD, and `search_documents_by_title` keyword search
+- [x] Full-document parsing into sections (`ragnostic.extraction`, pymupdf4llm default / docling pluggable)
+- [x] Section-aware chunking + document summarization (`ragnostic.semantic`)
+- [x] Pluggable embeddings (`ragnostic.embeddings`: TF-IDF offline default, Gemini/Cohere/fastembed)
+- [x] ChromaDB two-tier vector store (`ragnostic.vectorstore`)
+- [x] Two-tier query pipeline with section-coverage reranking + optional LLM answers (`ragnostic.query`)
+- [x] Orchestration (`RagIndexer`, `build_query_pipeline`) + demo script
+- [x] Tests (112 passing) with unit/integration markers; lint/format/test Make targets
+
+### Follow-ups (still open)
+- Image/table captioning (schema exists, extraction not wired)
+- Entity extraction / knowledge-graph links
+- LLM-quality semantic embeddings demoed end-to-end (needs keys/network)
+- Wikipedia ingestion
+- CI workflow on GitHub Actions (roadmap issue #01)
+
 ## Ingestion flow
 
 Completed the basic ingestion flow and it runs in jupyter.  Whats missing is the following:

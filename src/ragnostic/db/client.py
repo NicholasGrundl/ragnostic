@@ -168,6 +168,86 @@ class DatabaseClient:
             
             return schema.DocumentTable.model_validate(db_table)
 
+    def create_chunks(self, chunks: List[schema.DocumentChunkCreate]) -> List[schema.DocumentChunk]:
+        """Create document chunks in bulk."""
+        with self.get_session() as session:
+            db_chunks = [models.DocumentChunk(**c.model_dump()) for c in chunks]
+            session.add_all(db_chunks)
+            try:
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                raise ValueError("One or more chunk IDs already exist")
+            for c in db_chunks:
+                session.refresh(c)
+            return [schema.DocumentChunk.model_validate(c) for c in db_chunks]
+
+    def get_document_chunks(self, doc_id: str) -> List[schema.DocumentChunk]:
+        """Get all chunks for a document ordered by sequence."""
+        with self.get_session() as session:
+            chunks = (
+                session.query(models.DocumentChunk)
+                .filter(models.DocumentChunk.doc_id == doc_id)
+                .order_by(models.DocumentChunk.sequence_order)
+                .all()
+            )
+            return [schema.DocumentChunk.model_validate(c) for c in chunks]
+
+    def get_chunks_by_ids(self, chunk_ids: List[str]) -> List[schema.DocumentChunk]:
+        """Get chunks by their IDs."""
+        with self.get_session() as session:
+            chunks = (
+                session.query(models.DocumentChunk)
+                .filter(models.DocumentChunk.chunk_id.in_(chunk_ids))
+                .all()
+            )
+            return [schema.DocumentChunk.model_validate(c) for c in chunks]
+
+    def count_section_chunks(self, section_id: str) -> int:
+        """Count chunks belonging to a section."""
+        with self.get_session() as session:
+            return (
+                session.query(models.DocumentChunk)
+                .filter(models.DocumentChunk.section_id == section_id)
+                .count()
+            )
+
+    def upsert_summary(self, summary: schema.DocumentSummaryCreate) -> schema.DocumentSummary:
+        """Create or replace a document summary."""
+        with self.get_session() as session:
+            existing = session.query(models.DocumentSummary).filter(
+                models.DocumentSummary.doc_id == summary.doc_id
+            ).first()
+            if existing:
+                existing.summary = summary.summary
+                existing.method = summary.method
+                db_summary = existing
+            else:
+                db_summary = models.DocumentSummary(**summary.model_dump())
+                session.add(db_summary)
+            session.commit()
+            session.refresh(db_summary)
+            return schema.DocumentSummary.model_validate(db_summary)
+
+    def get_summary(self, doc_id: str) -> Optional[schema.DocumentSummary]:
+        """Get document summary."""
+        with self.get_session() as session:
+            result = session.query(models.DocumentSummary).filter(
+                models.DocumentSummary.doc_id == doc_id
+            ).first()
+            return schema.DocumentSummary.model_validate(result) if result else None
+
+    def search_documents_by_title(self, query: str, limit: int = 10) -> List[schema.DocumentMetadata]:
+        """Keyword search on document titles (case-insensitive substring match)."""
+        with self.get_session() as session:
+            results = (
+                session.query(models.DocumentMetadata)
+                .filter(models.DocumentMetadata.title.ilike(f"%{query}%"))
+                .limit(limit)
+                .all()
+            )
+            return [schema.DocumentMetadata.model_validate(r) for r in results]
+
     def delete_document(self, doc_id: str) -> bool:
         """Delete a document and all its related data."""
         with self.get_session() as session:

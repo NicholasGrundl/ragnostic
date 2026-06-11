@@ -15,6 +15,10 @@ from .schema import (
     DocumentImageCreate,
     DocumentTable,
     DocumentTableCreate,
+    DocumentChunk,
+    DocumentChunkCreate,
+    DocumentSummary,
+    DocumentSummaryCreate,
 )
 
 
@@ -50,5 +54,9 @@ __all__ = [
     "DocumentImageCreate",
     "DocumentTable",
     "DocumentTableCreate",
+    "DocumentChunk",
+    "DocumentChunkCreate",
+    "DocumentSummary",
+    "DocumentSummaryCreate",
     "create_sqlite_url",
 ]
