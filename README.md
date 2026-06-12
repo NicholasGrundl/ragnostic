@@ -2,6 +2,21 @@
 
 This repo is to explore and implement RAG for consulting and technical applications that use heavy PDFs.
 
+# Quickstart (MVP RAG pipeline)
+
+The full two-tier RAG pipeline (parse → chunk → summarize → embed → store →
+query → rerank) runs offline with no API keys:
+
+```bash
+pip install -e ".[dev]"      # or: make install-mvp
+make demo                     # index sample PDFs from data/ and run queries
+make test                     # 112 tests
+```
+
+See `docs/3_MVP_RAG_Pipeline.md` for the architecture, module map, and how to
+switch in production backends (Gemini/Cohere embeddings, docling parsing, LLM
+answers).
+
 # MVP 1:
 
 We will be focusing on an initial MVP to pipe asll the parts of the RAG system together for demoing and exploration as we build.

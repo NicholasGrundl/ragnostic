@@ -1,6 +1,6 @@
 [project]
 name = "ragnostic"
-version = "0.1.0"
+version = "0.2.0"
 description = "Diagnostic RAG system for chemical process design and techno-economic analysis"
 readme = "README.md"
 authors = [
@@ -8,14 +8,51 @@ authors = [
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "sqlalchemy>=2.0",
+    "pydantic>=2.0",
+    "nanoid",
+    "python-magic",
+    "pymupdf4llm",
+    "chromadb>=0.5",
+    "scikit-learn",
+    "numpy",
+    "burr[start]",
 ]
 
-[project.scripts]
-ragnostic = "ragnostic:main"
+[project.optional-dependencies]
+# Heavier / network-dependent backends, enable as needed
+docling = ["docling"]
+local-embed = ["fastembed"]
+gemini = ["google-genai"]
+cohere = ["cohere"]
+anthropic = ["anthropic"]
+openai = ["openai"]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[dependency-groups]
-dev = []
+[tool.hatch.build.targets.wheel]
+packages = ["src/ragnostic"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast isolated tests (default)",
+    "integration: tests exercising multiple components end-to-end",
+    "slow: tests that take more than a few seconds",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]

@@ -86,11 +86,33 @@ class DocumentImage(Base):
 class DocumentTable(Base):
     """Fact table for document tables."""
     __tablename__ = "document_tables"
-    
+
     id = Column(Integer, primary_key=True, autoincrement=True)
     doc_id = Column(String, ForeignKey("documents.id"), nullable=False)
-    section_id = Column(String, ForeignKey("document_sections.section_id"), 
+    section_id = Column(String, ForeignKey("document_sections.section_id"),
                        nullable=False)
     page_number = Column(Integer, nullable=False)
     table_data = Column(JSON, nullable=False)  # JSON structured data
     caption = Column(Text)
+
+
+class DocumentChunk(Base):
+    """Retrieval chunks derived from section content."""
+    __tablename__ = "document_chunks"
+
+    chunk_id = Column(String, primary_key=True)
+    doc_id = Column(String, ForeignKey("documents.id"), nullable=False)
+    section_id = Column(String, ForeignKey("document_sections.section_id"))
+    sequence_order = Column(Integer, nullable=False)  # Order within document
+    text = Column(Text, nullable=False)
+    word_count = Column(Integer, nullable=False, default=0)
+
+
+class DocumentSummary(Base):
+    """Document-level summaries used for first-tier retrieval."""
+    __tablename__ = "document_summaries"
+
+    doc_id = Column(String, ForeignKey("documents.id"), primary_key=True)
+    summary = Column(Text, nullable=False)
+    method = Column(String)  # e.g. "extractive", "llm:<model>"
+    created_at = Column(DateTime, nullable=False, default=datetime.datetime.now(datetime.timezone.utc))

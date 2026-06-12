@@ -1,8 +1,13 @@
 #### Python Environment ####
 .PHONY: install
-install: 
+install:
 	pip install -r ./requirements.txt
 	pip install -r ./requirements-dev.txt
+
+# Lightweight install of just the MVP runtime + dev tools (no torch/docling).
+.PHONY: install-mvp
+install-mvp:
+	pip install -e ".[dev]"
 
 .PHONY: uninstall
 uninstall:
@@ -10,8 +15,40 @@ uninstall:
 
 #### Development ####
 .PHONY: jupyter
-jupyter: 
+jupyter:
 	@jupyter lab --autoreload --no-browser
+
+#### Quality ####
+.PHONY: lint
+lint:
+	ruff check src tests
+
+.PHONY: format
+format:
+	ruff format src tests
+	ruff check --fix src tests
+
+.PHONY: typecheck
+typecheck:
+	mypy src/ragnostic
+
+#### Testing ####
+.PHONY: test
+test:
+	pytest -q
+
+.PHONY: test-unit
+test-unit:
+	pytest -q -m unit
+
+.PHONY: test-integration
+test-integration:
+	pytest -q -m integration
+
+#### Demo ####
+.PHONY: demo
+demo:
+	python scripts/demo_rag.py --limit 5
 
 
 
